@@ -29,3 +29,7 @@ task-echo:
 clean: nats-stop
 	pkill -f "tsx src/index.ts" 2>/dev/null || true
 	pkill -f "meshmind/agent" 2>/dev/null || true
+
+# 下发编排目标：make goal G="shell-all uname -a"
+goal:
+	cd master && npm run -s goal -- $(G)

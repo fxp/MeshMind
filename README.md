@@ -21,6 +21,10 @@ cd master
 npm run task -- mac-studio echo "hello mesh"
 npm run task -- linux-box shell -- ls /tmp
 npm run task -- mac-studio shell -- rm -rf /x   # 会被安全作用域拒绝
+
+# 5. 编排目标（主 Agent 多设备并行调度 + 结果汇聚）
+npm run goal -- shell-all uname -a
+npm run goal -- echo-all "mesh roll call"
 ```
 
 主 Agent 终端每 5 秒打印在线设备表（🟢/🟡/🔴 + 能力清单）。
@@ -39,7 +43,8 @@ npm run task -- mac-studio shell -- rm -rf /x   # 会被安全作用域拒绝
 - [x] 架构设计（DESIGN.md v1.0）
 - [x] **P0 骨架**：NATS + Go 子 Agent 注册/心跳 + TS 主机在线设备表（2 设备验证通过）
 - [x] **P1 远程执行**：echo / shell.run 端到端 RPC + 能力作用域强制（白名单/破坏性命令拦截）
-- [ ] P2 主 Agent 大脑（Claude Agent SDK：规划→多设备调度→综合）
+- [x] **P2 编排骨架**：可插拔 Planner + 规则规划器 + 多设备并行调度 + 结果汇聚（`control.goal`）
+  - [ ] P2.5 接 GLM 规划器（BigModel），让主 Agent 听懂自然语言目标
 - [ ] P3 子 Agent 本地智能体（本地 agentic loop + LLM 代理）
 - [ ] P4 安全治理（签名、ACL、审批门、审计、kill switch）
 - [ ] P5 高级能力（设备间直传、传感器汇聚、能力调度器）

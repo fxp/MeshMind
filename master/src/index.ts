@@ -6,6 +6,7 @@
 // 运行: NATS_URL=nats://localhost:4222 npm run start
 import { connect, JSONCodec, type NatsConnection, type Subscription } from "nats";
 import { Registry, type Manifest } from "./registry.ts";
+import { Orchestrator } from "./orchestrator.ts";
 
 const NATS_URL = process.env.NATS_URL ?? "nats://localhost:4222";
 const jc = JSONCodec();
@@ -38,6 +39,21 @@ async function handleRegistrations(sub: Subscription) {
 async function handleHeartbeats(sub: Subscription) {
   for await (const msg of sub) {
     registry.heartbeat(deviceIdFromSubject(msg.subject));
+  }
+}
+
+// control.goal — 编排入口。CLI 发来一个目标，主 Agent 规划+多设备调度+汇聚后回报告。
+async function handleGoals(sub: Subscription, orch: Orchestrator) {
+  for await (const msg of sub) {
+    const { goal } = jc.decode(msg.data) as { goal: string };
+    console.log(`\n[goal] 收到: "${goal}"`);
+    try {
+      const report = await orch.run(goal);
+      console.log(`[goal] 完成: ${report.succeeded}/${report.dispatched} 成功`);
+      msg.respond(jc.encode(report));
+    } catch (e) {
+      msg.respond(jc.encode({ error: (e as Error).message }));
+    }
   }
 }
 
@@ -74,8 +90,11 @@ async function main() {
   console.log(`[master] connected to ${NATS_URL}`);
   console.log("[master] 订阅 device.*.register / device.*.heartbeat ...");
 
+  const orchestrator = new Orchestrator(nc, registry);
   handleRegistrations(nc.subscribe("device.*.register")).catch(console.error);
   handleHeartbeats(nc.subscribe("device.*.heartbeat")).catch(console.error);
+  handleGoals(nc.subscribe("control.goal"), orchestrator).catch(console.error);
+  console.log("[master] 编排入口就绪: control.goal");
 
   const timer = setInterval(printTable, 5_000);
   printTable();

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "task": "tsx src/send-task.ts"
+    "task": "tsx src/send-task.ts",
+    "goal": "tsx src/run-goal.ts"
   },
   "dependencies": {
     "nats": "^2.29.3"
