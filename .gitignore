@@ -6,3 +6,6 @@ dist/
 agent/bin/
 .DS_Store
 data/
+
+master/node_modules/
+master/dist/
