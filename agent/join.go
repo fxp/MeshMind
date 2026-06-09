@@ -17,10 +17,12 @@ import (
 	"github.com/xiaopingfeng/meshmind/agent/internal/identity"
 )
 
-// enrollToken 是一次性令牌解码后的内容（见 DESIGN.md §7.5）。
+// enrollToken 是一次性令牌解码后的内容。
+// 兼容两种形态：v1 Mesh 版用 control_addr（内网 host:port）；CF 版用 enroll_url（完整 URL）。
 type enrollToken struct {
 	TSAuthKey    string   `json:"ts_authkey"`
 	ControlAddr  string   `json:"control_addr"`
+	EnrollURL    string   `json:"enroll_url"`
 	EnrollSecret string   `json:"enroll_secret"`
 	GrantedCaps  []string `json:"granted_caps"`
 	NameHint     string   `json:"name_hint"`
@@ -38,6 +40,8 @@ type enrollResponse struct {
 	DeviceID    string   `json:"device_id"`
 	NatsURL     string   `json:"nats_url"`
 	MeshName    string   `json:"mesh_name"`
+	WSURL       string   `json:"ws_url"`  // Cloudflare 版
+	Bearer      string   `json:"bearer"`  // Cloudflare 版
 	GrantedCaps []string `json:"granted_caps"`
 	Error       string   `json:"error"`
 }
@@ -88,13 +92,16 @@ func joinCmd(args []string) {
 		log.Printf("[join] 跳过 tailscale up（skip-network 或令牌无 ts_authkey）")
 	}
 
-	// 步骤 3：调注册端点
+	// 步骤 3：调注册端点（CF 版用完整 enroll_url；Mesh 版用 control_addr 拼）
 	manifest := capability.Detect(deviceName, agentVersion)
-	scheme := "http"
-	if *useHTTPS {
-		scheme = "https"
+	url := tok.EnrollURL
+	if url == "" {
+		scheme := "http"
+		if *useHTTPS {
+			scheme = "https"
+		}
+		url = fmt.Sprintf("%s://%s/enroll", scheme, tok.ControlAddr)
 	}
-	url := fmt.Sprintf("%s://%s/enroll", scheme, tok.ControlAddr)
 	reqBody, _ := json.Marshal(enrollRequest{
 		EnrollSecret: tok.EnrollSecret,
 		PublicKey:    id.PublicKey,
@@ -120,6 +127,8 @@ func joinCmd(args []string) {
 		ControlAddr: tok.ControlAddr,
 		NatsURL:     er.NatsURL,
 		MeshName:    er.MeshName,
+		WSURL:       er.WSURL,
+		Bearer:      er.Bearer,
 	}
 	if err := identity.Save(id, cfg); err != nil {
 		log.Fatalf("落盘失败: %v", err)
@@ -143,8 +152,8 @@ func decodeToken(s string) (enrollToken, error) {
 	if err := json.Unmarshal(b, &tok); err != nil {
 		return tok, err
 	}
-	if tok.ControlAddr == "" || tok.EnrollSecret == "" {
-		return tok, fmt.Errorf("令牌缺少 control_addr/enroll_secret")
+	if tok.EnrollSecret == "" || (tok.ControlAddr == "" && tok.EnrollURL == "") {
+		return tok, fmt.Errorf("令牌缺少 enroll_secret 或 control_addr/enroll_url")
 	}
 	return tok, nil
 }

@@ -9,3 +9,7 @@ data/
 
 master/node_modules/
 master/dist/
+
+cloudflare/node_modules/
+cloudflare/.wrangler/
+cloudflare/dist/

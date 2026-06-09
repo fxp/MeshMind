@@ -2,7 +2,10 @@ module github.com/xiaopingfeng/meshmind/agent
 
 go 1.25.0
 
-require github.com/nats-io/nats.go v1.52.0
+require (
+	github.com/coder/websocket v1.8.14
+	github.com/nats-io/nats.go v1.52.0
+)
 
 require (
 	github.com/klauspost/compress v1.18.5 // indirect

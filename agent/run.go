@@ -33,12 +33,18 @@ func runCmd(_ []string) {
 		cfg = identity.Config{NatsURL: envOr("NATS_URL", nats.DefaultURL)}
 		log.Printf("[agent] dev 模式（未入网）device_id=%s — 注册不签名", id.DeviceID)
 	}
+	manifest := capability.Detect(id.DeviceID, agentVersion)
+
+	// Cloudflare 版：有 ws_url 则走 WebSocket 传输。
+	if cfg.WSURL != "" {
+		runWS(id, cfg, manifest)
+		return
+	}
+
 	natsURL := envOr("NATS_URL", cfg.NatsURL)
 	if natsURL == "" {
 		natsURL = nats.DefaultURL
 	}
-
-	manifest := capability.Detect(id.DeviceID, agentVersion)
 
 	nc, err := nats.Connect(natsURL,
 		nats.Name("meshmind-agent/"+id.DeviceID),
@@ -155,54 +161,45 @@ type taskResult struct {
 	TookMs int64          `json:"took_ms"`
 }
 
-func taskHandler(m capability.Manifest) nats.MsgHandler {
-	return func(msg *nats.Msg) {
-		start := time.Now()
-		var req taskRequest
-		if err := json.Unmarshal(msg.Data, &req); err != nil {
-			replyErr(msg, "", "bad task json: "+err.Error(), start)
-			return
+// executeTask 是传输无关的任务执行核心（NATS 与 WS 两条路径共用）。
+func executeTask(req taskRequest, m capability.Manifest) taskResult {
+	start := time.Now()
+	switch req.Type {
+	case "echo":
+		var p struct {
+			Text string `json:"text"`
 		}
-		switch req.Type {
-		case "echo":
-			var p struct {
-				Text string `json:"text"`
-			}
-			_ = json.Unmarshal(req.Payload, &p)
-			reply(msg, taskResult{
-				TaskID: req.TaskID, OK: true,
-				Result: map[string]any{"text": p.Text},
-				TookMs: time.Since(start).Milliseconds(),
-			})
-		case "shell.run":
-			runShell(msg, req, m, start)
-		default:
-			replyErr(msg, req.TaskID, "unknown task type: "+req.Type, start)
+		_ = json.Unmarshal(req.Payload, &p)
+		return taskResult{
+			TaskID: req.TaskID, OK: true,
+			Result: map[string]any{"text": p.Text},
+			TookMs: time.Since(start).Milliseconds(),
 		}
+	case "shell.run":
+		return execShell(req, m, start)
+	default:
+		return errResult(req.TaskID, "unknown task type: "+req.Type, start)
 	}
 }
 
-func runShell(msg *nats.Msg, req taskRequest, m capability.Manifest, start time.Time) {
+func execShell(req taskRequest, m capability.Manifest, start time.Time) taskResult {
 	var p struct {
 		Cmd  string   `json:"cmd"`
 		Args []string `json:"args"`
 		Cwd  string   `json:"cwd"`
 	}
 	if err := json.Unmarshal(req.Payload, &p); err != nil {
-		replyErr(msg, req.TaskID, "bad payload: "+err.Error(), start)
-		return
+		return errResult(req.TaskID, "bad payload: "+err.Error(), start)
 	}
 	base := p.Cmd
 	if i := strings.LastIndexByte(base, '/'); i >= 0 {
 		base = base[i+1:]
 	}
 	if capability.DestructiveCommands[base] && m.Capabilities.Shell.DenyDestructive {
-		replyErr(msg, req.TaskID, "refused: destructive command '"+base+"'", start)
-		return
+		return errResult(req.TaskID, "refused: destructive command '"+base+"'", start)
 	}
 	if !m.Capabilities.Shell.AllowsCommand(base) {
-		replyErr(msg, req.TaskID, "refused: '"+base+"' not in shell allowlist", start)
-		return
+		return errResult(req.TaskID, "refused: '"+base+"' not in shell allowlist", start)
 	}
 
 	timeout := time.Duration(req.DeadlineSec) * time.Second
@@ -223,7 +220,7 @@ func runShell(msg *nats.Msg, req taskRequest, m capability.Manifest, start time.
 	if ee, ok := err.(*exec.ExitError); ok {
 		exitCode = ee.ExitCode()
 	}
-	reply(msg, taskResult{
+	return taskResult{
 		TaskID: req.TaskID, OK: err == nil,
 		Result: map[string]any{
 			"stdout":    stdout.String(),
@@ -231,17 +228,26 @@ func runShell(msg *nats.Msg, req taskRequest, m capability.Manifest, start time.
 			"exit_code": exitCode,
 		},
 		TookMs: time.Since(start).Milliseconds(),
-	})
+	}
 }
 
-func reply(msg *nats.Msg, r taskResult) {
-	b, _ := json.Marshal(r)
-	_ = msg.Respond(b)
-}
-
-func replyErr(msg *nats.Msg, taskID, errMsg string, start time.Time) {
+func errResult(taskID, errMsg string, start time.Time) taskResult {
 	s := errMsg
-	reply(msg, taskResult{TaskID: taskID, OK: false, Error: &s, TookMs: time.Since(start).Milliseconds()})
+	return taskResult{TaskID: taskID, OK: false, Error: &s, TookMs: time.Since(start).Milliseconds()}
+}
+
+// NATS 适配器
+func taskHandler(m capability.Manifest) nats.MsgHandler {
+	return func(msg *nats.Msg) {
+		var req taskRequest
+		if err := json.Unmarshal(msg.Data, &req); err != nil {
+			b, _ := json.Marshal(errResult("", "bad task json: "+err.Error(), time.Now()))
+			_ = msg.Respond(b)
+			return
+		}
+		b, _ := json.Marshal(executeTask(req, m))
+		_ = msg.Respond(b)
+	}
 }
 
 func envOr(k, def string) string {

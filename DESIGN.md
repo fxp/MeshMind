@@ -1,7 +1,13 @@
 # MeshMind — 个人设备网格 · 分层 AI 多智能体系统
 
-> 设计文档 v1.0 · 2026-06-08
+> 设计文档 v2.0 · 2026-06-09
 > 工作代号 **MeshMind**（可改名）。本文是后续开发的基线，任何架构变更先改本文再动代码。
+>
+> **v2.0 重大转向**：控制平面迁到 **Cloudflare 边缘**（Worker + Durable Object + WS），
+> 除模型推理走 **BigModel(GLM)** 外，连接中枢/队列/存储/编排全部跑在 Cloudflare 上。
+> 这取代了 v1.0 的「VPS + NATS + Tailscale(Mesh 优先)」控制平面方案 —— 详见 §0。
+> v1.0 的 §4/§5/§7.5/§10（Tailscale/NATS/入网部署层）降级为**可选/历史参考**；
+> 入网仪式的**核心**（一次性令牌 + ed25519 身份 + 签名注册）传输无关，**继续有效**。
 
 ---
 
@@ -11,7 +17,90 @@
 在公网部署一个**会自主推理的主 Agent**，它把目标分解后下发给每台设备上**同样会自主推理的子 Agent**，
 子 Agent 在本地环境里自主完成子任务、回传结果，主 Agent 综合产出。
 
-本质：**私有设备网格（网络层）+ 分层多智能体编排（智能层）** 两层叠加。
+本质：**分层多智能体编排** + **Cloudflare 边缘做永远在线的连接/队列/存储中枢**。
+
+---
+
+## 0. 控制平面（v2.0 确定版）— Cloudflare 边缘
+
+**决策**：除模型推理走 BigModel(GLM) 外，其余尽量跑在 Cloudflare 上。换掉 v1.0 的 VPS+NATS+Tailscale。
+**收益**：零运维、零自维护服务器、永远在线、全球边缘、按量计费近乎免费（个人规模）。
+
+```
+设备 (Go 子 Agent, WebSocket 客户端)
+   ║ wss://ctrl.<domain>/agent/<id>   (TLS + per-device bearer token 鉴权)
+   ▼
+┌──────────────────────── Cloudflare 边缘 ────────────────────────┐
+│  Worker (路由)                                                   │
+│   /enroll(POST)  /agent/<id>(WS)  /goal(POST)  /admin/enroll/new │
+│        │ forward                                                 │
+│  ┌─────▼────────────────── Hub Durable Object ────────────────┐  │
+│  │ • 持有所有设备 WS 连接（Hibernation API，空闲不计费）        │  │
+│  │ • 设备注册表 + 能力清单（DO SQLite storage）                │  │
+│  │ • 编排：规划→并行下发→结果汇聚（规则规划器/GLM 规划器）      │  │
+│  │ • 离线信箱：设备不在线则存任务，重连/alarm 唤醒再投递        │  │
+│  │ • 一次性令牌 + 设备公钥登记 + ed25519 验签                   │  │
+│  └─────┬──────────────────────────────────────────────────────┘  │
+│  D1(注册表/审计持久化)  KV(令牌)  R2(大文件/产物)                  │
+└────────┼─────────────────────────────────────────────────────────┘
+         │ fetch 出站
+         ▼
+   BigModel (GLM) — 仅模型推理
+```
+
+### 组件映射
+
+| 角色 | Cloudflare 原语 |
+|---|---|
+| 设备长连接中枢（替代 NATS） | **Durable Object + WebSocket Hibernation** |
+| 离线设备任务排队 | **DO storage 信箱**（或 Cloudflare Queues），DO **alarm** 做超时/重投 |
+| 注册表 / 审计 | **DO SQLite storage**（量大再迁 **D1**） |
+| 一次性令牌 / per-device bearer | **DO storage**（或 **KV**） |
+| 大文件 / 产物中转 | **R2** |
+| 注册端点 / 路由 | **Worker** 路由 |
+| LLM 推理 | Worker `fetch` → **BigModel(GLM)** |
+
+### 与 v1.0 的差异
+
+| 维度 | v1.0 | v2.0（本版） |
+|---|---|---|
+| 传输 | NATS（设备拨出长连） | **WebSocket → Durable Object** |
+| 设备鉴权 | NATS nkey/JWT 凭证 | **per-device bearer token**（enroll 下发）+ ed25519 签名注册 |
+| 网络 | Tailscale Mesh 优先、零公网面 | **CF 公网边缘**（TLS+token+CF WAF/DDoS）；Tailscale 降级为 P5 设备间直传可选 |
+| 常驻主机 | VPS / 家用机 | **无**（Cloudflare 托管） |
+| 编排器宿主 | VPS 长驻进程 | **Hub Durable Object** |
+| 重型自主 loop | 长驻进程随便跑 | **DO + alarm 分步驱动**（CPU 时间受限，P3 注意） |
+
+### 不变的部分（v1.0 资产保留）
+
+入网仪式核心（一次性令牌、ed25519 设备身份、签名注册防冒充）、能力模型与作用域强制、
+Task Spec、规则规划器、可插拔 Planner 接口 —— 全部传输无关，直接复用。
+只把「NATS 凭证」换成「WSS bearer token」，「ed25519 验签」用 Workers 的 WebCrypto 实现。
+
+### 设备入网（CF 版）
+
+```
+你:   POST /admin/enroll/new {name, caps}              → 一次性令牌(含 enroll_url)
+设备: meshmind-agent join --token <令牌>
+      1. 本地生成 ed25519 密钥对
+      2. POST enroll_url {enroll_secret, pubkey, manifest}
+         ← {device_id, ws_url, bearer, granted_caps}
+      3. 落盘 ~/.meshmind/
+设备: meshmind-agent run
+      → wss 连 ws_url（带 bearer）→ 发签名注册 → Hub 验签 → 心跳/任务
+```
+
+### 协议（WS 帧，JSON）
+
+| kind | 方向 | 说明 |
+|---|---|---|
+| `register` | 设备→Hub | `{manifest_json, sig}`，Hub 验签后登记 |
+| `heartbeat` | 设备→Hub | `{ts, load}` |
+| `task` | Hub→设备 | `{task_id, type, payload, granted_capabilities, deadline_sec}` |
+| `result` | 设备→Hub | `{task_id, ok, result, error, took_ms}` |
+| `kill` | Hub→设备 | 停止执行/思考权 |
+
+---
 
 ---
 

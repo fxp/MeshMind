@@ -23,6 +23,9 @@ type Config struct {
 	ControlAddr string `json:"control_addr"`
 	NatsURL     string `json:"nats_url"`
 	MeshName    string `json:"mesh_name"`
+	// Cloudflare 版传输
+	WSURL  string `json:"ws_url"`
+	Bearer string `json:"bearer"`
 }
 
 func Home() string {

@@ -2,13 +2,33 @@
 
 个人设备网格 · 分层 AI 多智能体系统。
 
-把名下所有设备接入一张私有虚拟网（Tailscale/Headscale），公网部署一个会自主推理的
-**主 Agent**，它把目标分解后下发给每台设备上的**子 Agent**，子 Agent 在本地自主完成
-子任务并回传，主 Agent 综合产出。
+把名下所有设备接入一个**会自主推理的主 Agent**，它把目标分解后下发给每台设备上的
+**子 Agent**，子 Agent 在本地自主完成子任务并回传，主 Agent 综合产出。
 
-完整架构见 [DESIGN.md](./DESIGN.md)。消息格式见 [proto/messages.md](./proto/messages.md)。
+**v2.0 架构（当前）**：控制平面跑在 **Cloudflare 边缘**（Worker + Durable Object + WebSocket），
+除模型推理走 **BigModel(GLM)** 外，连接中枢/队列/存储/编排全在 Cloudflare —— 零运维、永远在线、无 VPS。
+完整架构见 [DESIGN.md §0](./DESIGN.md)；Hub 见 [cloudflare/](./cloudflare/)。
 
-## 快速开始（本机验证 P0/P1）
+> v1.0 的 NATS + Tailscale(Mesh 优先) 方案仍保留在 `infra/` + `master/`，可作本地/离线备选。
+
+## 快速开始（Cloudflare 版，推荐）
+
+```bash
+cd cloudflare && npm install && npm run dev    # 本地起 Hub（workerd），无需 CF 账号
+
+# 真实设备经 CF 入网（另开终端）
+cd agent && go build -o meshmind-agent .
+ENC=$(curl -s -X POST localhost:8787/admin/enroll/new -d '{"name":"box","caps":["shell","fs"]}' \
+      | python3 -c "import sys,json;print(json.load(sys.stdin)['encoded'])")
+./meshmind-agent join --token "$ENC" && ./meshmind-agent run &
+
+curl localhost:8787/devices                              # 看在线设备
+curl -X POST localhost:8787/goal -d '{"goal":"shell-all uname -a"}'   # 经 CF 多设备下发
+```
+
+详见 [cloudflare/README.md](./cloudflare/README.md)。
+
+## 快速开始（v1.0 NATS 版，本地/离线备选）
 
 ```bash
 make nats                 # 1. 启动 NATS（需要 Docker）
@@ -55,7 +75,14 @@ go build -o meshmind-agent ./agent
 
 ## 状态
 
-- [x] 架构设计（DESIGN.md v1.0）
+- [x] 架构设计 v2.0（Cloudflare 边缘 + BigModel 推理）
+- [x] **Cloudflare Hub**：Worker + Hub Durable Object（WS Hibernation）+ 入网 + 注册表 + 规则编排 + 离线信箱
+  - 本地 `wrangler dev` 端到端验证：Go 子 Agent 经 CF 令牌入网 → WS 签名注册 verified=true → 多设备 goal 并行下发+汇聚 → 破坏性命令本地拦截
+  - [ ] 部署到真实 Cloudflare 账号（`wrangler deploy`）
+  - [ ] `/admin` + `/goal` 管理鉴权
+- [ ] P2.5 GLM 规划器（BigModel，听懂自然语言目标）
+- [ ] P3 子 Agent 本地 agentic loop（DO + alarm 分步驱动）
+- [x] 架构设计（DESIGN.md v1.0，已被 v2.0 取代部分）
 - [x] **P0 骨架**：NATS + Go 子 Agent 注册/心跳 + TS 主机在线设备表（2 设备验证通过）
 - [x] **P1 远程执行**：echo / shell.run 端到端 RPC + 能力作用域强制（白名单/破坏性命令拦截）
 - [x] **P2 编排骨架**：可插拔 Planner + 规则规划器 + 多设备并行调度 + 结果汇聚（`control.goal`）
