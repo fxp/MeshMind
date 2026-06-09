@@ -77,9 +77,8 @@ go build -o meshmind-agent ./agent
 
 - [x] 架构设计 v2.0（Cloudflare 边缘 + BigModel 推理）
 - [x] **Cloudflare Hub**：Worker + Hub Durable Object（WS Hibernation）+ 入网 + 注册表 + 规则编排 + 离线信箱
-  - 本地 `wrangler dev` 端到端验证：Go 子 Agent 经 CF 令牌入网 → WS 签名注册 verified=true → 多设备 goal 并行下发+汇聚 → 破坏性命令本地拦截
-  - [ ] 部署到真实 Cloudflare 账号（`wrangler deploy`）
-  - [ ] `/admin` + `/goal` 管理鉴权
+  - [x] 管理面鉴权：`/admin` `/goal` `/devices` 需 admin token
+  - [x] **已部署上线**：`https://meshmind-hub.fxp007.workers.dev`（真机经公网入网 + goal 下发汇聚已验证）
 - [ ] P2.5 GLM 规划器（BigModel，听懂自然语言目标）
 - [ ] P3 子 Agent 本地 agentic loop（DO + alarm 分步驱动）
 - [x] 架构设计（DESIGN.md v1.0，已被 v2.0 取代部分）

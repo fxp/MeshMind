@@ -54,9 +54,22 @@ cd agent && go build -o meshmind-agent .
 ## 部署到 Cloudflare
 
 ```bash
-npm run deploy        # wrangler deploy（需 cloudflare 账号 + wrangler login）
+npx wrangler deploy                                   # 部署 Worker + Hub DO
+echo "<强随机串>" | npx wrangler secret put ADMIN_TOKEN  # 设管理令牌
 ```
 部署后 `enroll_url` / `ws_url` 自动变成你的 `*.workers.dev`（或自定义域）。
+
+**当前线上**：`https://meshmind-hub.fxp007.workers.dev`
+
+真机入网（任意机器）：
+```bash
+cd agent && go build -o meshmind-agent .
+ENC=$(curl -s -H "authorization: Bearer $ADMIN_TOKEN" -X POST \
+      https://meshmind-hub.fxp007.workers.dev/admin/enroll/new \
+      -d '{"name":"my-box","caps":["shell","fs"]}' \
+      | python3 -c "import sys,json;print(json.load(sys.stdin)['encoded'])")
+./meshmind-agent join --token "$ENC" && ./meshmind-agent run
+```
 
 ## HTTP / WS 接口
 
