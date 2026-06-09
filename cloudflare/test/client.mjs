@@ -5,6 +5,7 @@ import { execFile } from "node:child_process";
 
 const BASE = process.env.BASE ?? "http://localhost:8787";
 const NAME = process.env.NAME ?? "mac-studio";
+const ADMIN = process.env.ADMIN_TOKEN ?? "local-dev-admin-secret-change-me";
 const ALLOW = ["ls", "echo", "uname", "pwd", "stat", "du"];
 const DESTRUCTIVE = new Set(["rm", "rmdir", "dd", "mkfs", "kill", "shutdown", "reboot"]);
 
@@ -39,6 +40,7 @@ async function main() {
   // 1. 签发令牌
   const mintRes = await fetch(`${BASE}/admin/enroll/new`, {
     method: "POST",
+    headers: { authorization: `Bearer ${ADMIN}` },
     body: JSON.stringify({ name: NAME, caps: ["shell", "fs"] }),
   });
   const mint = await mintRes.json();

@@ -12,19 +12,34 @@
 | `src/crypto.ts` | ed25519 验签（WebCrypto）+ 随机令牌 |
 | `src/planner.ts` | 规则规划器（可插拔，GLM 版将来实现同接口） |
 
+## 鉴权
+
+| 路由 | 鉴权 |
+|---|---|
+| `/health` | 公开 |
+| `/enroll` | 一次性 `enroll_secret` 自鉴权 |
+| `/agent/<id>` (WS) | per-device `bearer` |
+| `/admin/* `·`/goal`·`/devices` | **admin token**（`Authorization: Bearer <ADMIN_TOKEN>`） |
+
+- 本地：`ADMIN_TOKEN` 放 `.dev.vars`（见 `.dev.vars.example`，wrangler dev 自动加载）。
+- 线上：`npx wrangler secret put ADMIN_TOKEN`。
+- 未配置 `ADMIN_TOKEN` 时，所有管理操作一律拒绝（安全默认）。
+
 ## 本地开发（无需 CF 账号）
 
 ```bash
 cd cloudflare && npm install
+cp .dev.vars.example .dev.vars   # 改成你的随机串
 npm run dev                      # wrangler dev → http://localhost:8787
 
-# 模拟一台设备（另开终端）
-node test/client.mjs             # enroll → WS → 签名注册 → 执行任务
+# 模拟一台设备（另开终端，会用 .dev.vars 里的 ADMIN_TOKEN 签发令牌）
+ADMIN_TOKEN=local-dev-admin-secret-change-me node test/client.mjs
 
-# 签发令牌 / 看设备 / 下发目标
-curl -X POST localhost:8787/admin/enroll/new -d '{"name":"box","caps":["shell","fs"]}'
-curl localhost:8787/devices
-curl -X POST localhost:8787/goal -d '{"goal":"shell-all uname -a"}'
+# 管理操作需带 admin token
+A='-H "authorization: Bearer local-dev-admin-secret-change-me"'
+curl $A -X POST localhost:8787/admin/enroll/new -d '{"name":"box","caps":["shell","fs"]}'
+curl $A localhost:8787/devices
+curl $A -X POST localhost:8787/goal -d '{"goal":"shell-all uname -a"}'
 ```
 
 ## 真实设备（Go 子 Agent 经 CF 入网）
@@ -53,5 +68,3 @@ npm run deploy        # wrangler deploy（需 cloudflare 账号 + wrangler login
 | `/agent/<id>` | WS | 设备长连接（`?token=<bearer>`） |
 | `/devices` | GET | 在线设备 + 能力 |
 | `/goal` | POST | 编排目标 `{goal}` → 并行下发 + 汇聚 |
-
-> ⚠️ `/admin/*` 与 `/goal` 目前无鉴权，部署前需加管理鉴权（见 DESIGN §8）。
