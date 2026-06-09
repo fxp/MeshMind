@@ -185,6 +185,81 @@ NATS 长连接和设备间文件直传都跑在这张虚拟网上。
 
 ---
 
+## 7.5 设备入网（Enrollment）— 确定版
+
+**已定决策**：Mesh 优先（Tailscale 必选，NATS 仅绑 mesh 内网口、永不公网）+ 每设备一次性令牌。
+关键技巧：一次性令牌**内嵌一把 Tailscale 一次性 auth key**，设备先入 mesh 再访问只在内网开放的
+注册端点 → **零公网攻击面**（公网上只剩 Tailscale 自己的协调服务）。
+
+### 三层 join
+
+| 层 | 设备获得 | 凭据 |
+|---|---|---|
+| ① 网络层 | mesh IP + MagicDNS 名 | Tailscale auth key（令牌内嵌，一次性） |
+| ② 消息层 | NATS 连接，subject 锁死 `device.<id>.*` | per-device NATS 凭证（注册端点下发） |
+| ③ 智能层 | device_id + 授权能力，写入注册表 | ed25519 设备密钥对（设备本地生成，签名注册） |
+
+### 一次性令牌（Enrollment Token）内容
+
+```jsonc
+{
+  "ts_authkey": "tskey-auth-...",        // Tailscale 一次性入网 key（或 Headscale preauthkey）
+  "control_addr": "ctrl.mesh:8443",       // 内网控制面注册端点
+  "enroll_secret": "<single-use random>", // 一次性、TTL 有效，主 Agent 侧存哈希
+  "granted_caps": ["shell", "fs"],         // 授权能力
+  "name_hint": "mac-studio",
+  "expires_at": "2026-06-08T11:00:00Z"
+}
+```
+
+### join 流程（目标 UX：一行命令）
+
+```
+你在主 Agent:  meshmind enroll new --name mac-studio --caps shell,fs   →  打印一次性令牌
+
+新设备:        meshmind-agent join --token <令牌>
+  1. 本地生成 ed25519 密钥对（私钥永不离开设备，chmod 600）
+  2. tailscale up --authkey <ts_authkey>            → 入 mesh
+  3. POST control_addr/enroll {enroll_secret, pubkey, manifest}
+  4. 主 Agent 校验 enroll_secret(一次性) → 返回 device_id + NATS 凭证 + 确认能力
+  5. 用凭证连 NATS（subject 锁死 device.<id>.*）
+  6. 上报能力清单（设备私钥签名）→ 主 Agent 用第①步 pubkey 验签 → 写入注册表
+  7. 凭证落盘 ~/.meshmind/{identity.json, nats.creds, config.json}
+```
+
+之后 `meshmind-agent run` 读盘复用身份；注册消息始终带签名，主 Agent 验签防冒充。
+
+### 设备本地持久化布局
+
+```
+~/.meshmind/
+├── identity.json    # device_id + ed25519 公私钥（priv chmod 600）
+├── nats.creds       # per-device NATS 凭证
+└── config.json      # control_addr / nats_url / mesh 名
+```
+
+### 撤销 / Kill（网络+消息层）
+
+`meshmind revoke <device_id>` → 作废 NATS 凭证 + 删 Tailscale/Headscale 节点 + 注册表标记 revoked。
+补在运行时 `control.kill.{id}`（§8.8）之外，从网络与消息两层断开设备。
+
+### 推荐云服务
+
+- **网络平面**：起步用 **Tailscale 免费版**（个人 100 设备/3 用户免费，零运维）；
+  要彻底去依赖再切自托管 **Headscale**（接口兼容）。
+- **控制平面主机**：默认 **Hetzner CX22**（~€4/月，2vCPU/4GB）；零成本版 **Oracle Cloud 免费 ARM**；
+  也可 Fly.io / DigitalOcean。主机以普通设备身份加入 tailnet，NATS 绑 tailscale 网口。
+
+### 实现分层
+
+| 层 | 何时做 | 与主机选择 |
+|---|---|---|
+| 入网仪式核心（令牌→密钥→注册端点→分配身份→签名注册→落盘） | 现在，本机可验证 | **无关** |
+| NATS per-device 凭证强制（nkey/JWT 去中心化认证） | 部署层 | 相关 |
+| Tailscale/Headscale auth key 签发 + `tailscale up` 接线 | 部署层 | 相关 |
+
+---
+
 ## 8. 安全模型
 
 「自主 AI + 远程 shell」是高危组合，安全是一等公民。

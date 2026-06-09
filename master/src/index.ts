@@ -5,35 +5,116 @@
 //
 // 运行: NATS_URL=nats://localhost:4222 npm run start
 import { connect, JSONCodec, type NatsConnection, type Subscription } from "nats";
+import { createServer } from "node:http";
 import { Registry, type Manifest } from "./registry.ts";
 import { Orchestrator } from "./orchestrator.ts";
+import { Enrollment } from "./enroll.ts";
 
 const NATS_URL = process.env.NATS_URL ?? "nats://localhost:4222";
+const ENROLL_PORT = Number(process.env.ENROLL_PORT ?? 7700);
 const jc = JSONCodec();
 const registry = new Registry();
+const enrollment = new Enrollment();
 
 function deviceIdFromSubject(subject: string): string {
   // device.<id>.<verb>
   return subject.split(".")[1] ?? "?";
 }
 
+interface RegisterEnvelope {
+  manifest_json: string;
+  sig: string;
+}
+
 async function handleRegistrations(sub: Subscription) {
   for await (const msg of sub) {
-    const m = jc.decode(msg.data) as Manifest;
+    const env = jc.decode(msg.data) as RegisterEnvelope;
+    let m: Manifest;
+    try {
+      m = JSON.parse(env.manifest_json) as Manifest;
+    } catch {
+      msg.respond(jc.encode({ ok: false, error: "manifest_json 解析失败" }));
+      continue;
+    }
+
+    // 已入网设备必须验签通过（防冒充）；未入网设备走 dev 模式接受但标记 unverified。
+    const enrolled = enrollment.isEnrolled(m.device_id);
+    let verified = false;
+    if (enrolled) {
+      verified = enrollment.verifyRegister(m.device_id, env.manifest_json, env.sig);
+      if (!verified) {
+        console.log(`\n[register] ✗ ${m.device_id} 验签失败 — 拒绝`);
+        msg.respond(jc.encode({ ok: false, verified: false, error: "签名验证失败" }));
+        continue;
+      }
+    }
+
     const state = registry.register(m);
     const isNew = state.registeredAt.getTime() === state.lastSeen.getTime();
+    const badge = enrolled ? (verified ? "✓signed" : "?") : "dev/unverified";
     console.log(
-      `\n[register] ${m.device_id} (${m.os}/${m.arch}) ${isNew ? "NEW" : "re-register"} ` +
+      `\n[register] ${m.device_id} (${m.os}/${m.arch}) ${isNew ? "NEW" : "re-register"} [${badge}] ` +
         `— shell:${m.capabilities.shell.allow.length} fs.read:${m.capabilities.fs.read.length}`,
     );
     msg.respond(
       jc.encode({
         ok: true,
+        verified,
         registered_at: state.registeredAt.toISOString(),
         server_time: new Date().toISOString(),
       }),
     );
   }
+}
+
+// control.enroll.new — CLI 请求主 Agent 签发一次性入网令牌。
+async function handleEnrollMint(sub: Subscription) {
+  for await (const msg of sub) {
+    const { name, caps, tsAuthKey } = jc.decode(msg.data) as {
+      name: string;
+      caps: string[];
+      tsAuthKey?: string;
+    };
+    const token = enrollment.mint({ name, caps, tsAuthKey });
+    console.log(`\n[enroll] 签发令牌 name=${name} caps=${caps.join(",")}`);
+    msg.respond(jc.encode(token));
+  }
+}
+
+// 入网 HTTP 端点（部署时应置于 mesh 内网 + TLS）。
+function startEnrollServer() {
+  const server = createServer((req, res) => {
+    if (req.method !== "POST" || req.url !== "/enroll") {
+      res.writeHead(404).end("not found");
+      return;
+    }
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", () => {
+      try {
+        const { enroll_secret, public_key, manifest } = JSON.parse(body);
+        const result = enrollment.redeem({
+          enroll_secret,
+          public_key,
+          deviceId: manifest?.device_id ?? "",
+        });
+        res.writeHead(result.ok ? 200 : 403, { "content-type": "application/json" });
+        res.end(JSON.stringify(result));
+        console.log(
+          result.ok
+            ? `[enroll] ✅ 设备入网 device_id=${result.device_id}`
+            : `[enroll] ✗ 拒绝: ${result.error}`,
+        );
+      } catch (e) {
+        res.writeHead(400, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: (e as Error).message }));
+      }
+    });
+  });
+  server.listen(ENROLL_PORT, () => {
+    console.log(`[master] 注册端点 http://localhost:${ENROLL_PORT}/enroll`);
+  });
+  return server;
 }
 
 async function handleHeartbeats(sub: Subscription) {
@@ -94,13 +175,16 @@ async function main() {
   handleRegistrations(nc.subscribe("device.*.register")).catch(console.error);
   handleHeartbeats(nc.subscribe("device.*.heartbeat")).catch(console.error);
   handleGoals(nc.subscribe("control.goal"), orchestrator).catch(console.error);
-  console.log("[master] 编排入口就绪: control.goal");
+  handleEnrollMint(nc.subscribe("control.enroll.new")).catch(console.error);
+  console.log("[master] 编排入口就绪: control.goal / control.enroll.new");
 
+  const enrollServer = startEnrollServer();
   const timer = setInterval(printTable, 5_000);
   printTable();
 
   const shutdown = async () => {
     clearInterval(timer);
+    enrollServer.close();
     console.log("\n[master] draining...");
     await nc.drain();
     process.exit(0);
