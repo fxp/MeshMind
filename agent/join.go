@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/xiaopingfeng/meshmind/agent/internal/capability"
@@ -52,6 +53,7 @@ func joinCmd(args []string) {
 	token := fs.String("token", "", "一次性入网令牌（base64）")
 	skipNet := fs.Bool("skip-network", false, "跳过 tailscale up（本机联调用）")
 	useHTTPS := fs.Bool("https", false, "用 https 访问注册端点（部署默认应为 true）")
+	server := fs.String("server", "", "覆盖注册端点 base（如 https://hub.example.com）——绕开令牌里写死的 URL")
 	_ = fs.Parse(args)
 
 	if *token == "" {
@@ -92,16 +94,23 @@ func joinCmd(args []string) {
 		log.Printf("[join] 跳过 tailscale up（skip-network 或令牌无 ts_authkey）")
 	}
 
-	// 步骤 3：调注册端点（CF 版用完整 enroll_url；Mesh 版用 control_addr 拼）
+	// 步骤 3：调注册端点。优先级：--server > 令牌 enroll_url > 令牌 control_addr。
+	// 用 --server 可绕开令牌里写死的（可能被墙的）URL，改连可达的自定义域名。
 	manifest := capability.Detect(deviceName, agentVersion)
-	url := tok.EnrollURL
-	if url == "" {
+	var url string
+	switch {
+	case *server != "":
+		url = strings.TrimRight(*server, "/") + "/enroll"
+	case tok.EnrollURL != "":
+		url = tok.EnrollURL
+	default:
 		scheme := "http"
 		if *useHTTPS {
 			scheme = "https"
 		}
 		url = fmt.Sprintf("%s://%s/enroll", scheme, tok.ControlAddr)
 	}
+	log.Printf("[join] 注册端点: %s", url)
 	reqBody, _ := json.Marshal(enrollRequest{
 		EnrollSecret: tok.EnrollSecret,
 		PublicKey:    id.PublicKey,

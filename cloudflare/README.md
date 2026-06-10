@@ -61,6 +61,21 @@ echo "<强随机串>" | npx wrangler secret put ADMIN_TOKEN  # 设管理令牌
 
 **当前线上**：`https://meshmind-hub.fxp007.workers.dev`
 
+### 自定义域名（绕开 workers.dev 被墙）
+
+`wrangler.jsonc` 已加 `routes: [{pattern:"hub.xiaopingfeng.com", custom_domain:true}]`。
+重新 `npx wrangler deploy`，CF 自动建 DNS + 边缘证书。之后用自定义域名签发/入网：
+
+```bash
+ADMIN=<你的 ADMIN_TOKEN>; HUB=https://hub.xiaopingfeng.com
+ENC=$(curl -s -H "authorization: Bearer $ADMIN" -X POST $HUB/admin/enroll/new \
+      -d '{"name":"box","caps":["shell","fs"]}' | python3 -c "import sys,json;print(json.load(sys.stdin)['encoded'])")
+./meshmind-agent join --token "$ENC" --server "$HUB"   # ws_url 自动变成 hub.xiaopingfeng.com
+./meshmind-agent run
+```
+
+被墙时换地址无需重签令牌：`run --ws wss://<可达域>/agent/<id>` 或 `MESHMIND_WS_URL` 环境变量。
+
 真机入网（任意机器）：
 ```bash
 cd agent && go build -o meshmind-agent .

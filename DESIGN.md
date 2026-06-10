@@ -100,6 +100,30 @@ Task Spec、规则规划器、可插拔 Planner 接口 —— 全部传输无关
 | `result` | 设备→Hub | `{task_id, ok, result, error, took_ms}` |
 | `kill` | Hub→设备 | 停止执行/思考权 |
 
+### 可达性 / 被墙网络（中国大陆）
+
+`*.workers.dev` 在中国大陆常被 SNI 阻断、公司防火墙也常拉黑。CF 公网路线的主要软肋就是
+「设备→Hub 这一跳的域名可能不可达」（这是 v1 Tailscale Mesh 能规避的——它有自带中继）。
+
+**主解法：自定义域名（零代码改动）。** 被挡的是 `workers.dev` 这个域名，不是整个 CF 边缘。
+绑一个自有域名（`hub.xiaopingfeng.com`，须在本 CF 账号）即可绕开。Hub 的 `enroll_url`/`ws_url`
+从请求 Host 头派生，故**只要用该域名签发/入网，设备全程走该域名**，无需改码。
+配置：`wrangler.jsonc` 的 `routes` 已加 `{pattern:"hub.xiaopingfeng.com", custom_domain:true}`，
+`wrangler deploy` 时 CF 自动建 DNS + 边缘证书。
+
+**设备侧灵活性**：Go 子 Agent 支持覆盖，换域名/加兜底无需重新签发令牌：
+- `join --server https://hub.xiaopingfeng.com`（覆盖注册端点）
+- `run --ws wss://hub.xiaopingfeng.com/agent/<id>` 或 `MESHMIND_WS_URL` 环境变量
+
+**仍不稳时的兜底阶梯**（v1 代码均保留）：
+| 兜底 | 做法 | 代价 |
+|---|---|---|
+| 小中转 | 设备够得着处（港/新 VPS、域内 VPS、同 LAN 机器）反代/CF Tunnel 转发到 Worker | 多一个极小盒子 |
+| Mesh 混合 | 被挡网络里的设备走 v1 Tailscale（中继通常可达），其余走 CF | 多传输并存 |
+| 自托管 | 这些设备连 v1 NATS/master（域内 VPS/家用机），完全不碰 CF | 维护一个常驻节点 |
+
+> BigModel（`open.bigmodel.cn`）在国内，CF 边缘出站可正常访问；问题只在「设备→Hub」一跳。
+
 ---
 
 ---

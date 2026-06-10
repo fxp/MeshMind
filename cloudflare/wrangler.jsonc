@@ -5,6 +5,11 @@
   "compatibility_date": "2025-09-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // 自定义域名：绕开常被墙/被限的 *.workers.dev。xiaopingfeng.com 须在本 CF 账号。
+  // deploy 时 CF 自动建 DNS + 边缘证书。被墙网络改连此域即可（设备用 --server 覆盖）。
+  "routes": [
+    { "pattern": "hub.xiaopingfeng.com", "custom_domain": true }
+  ],
   "durable_objects": {
     "bindings": [{ "name": "HUB", "class_name": "Hub" }]
   },

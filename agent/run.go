@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -20,7 +21,12 @@ import (
 
 // runCmd 是正常运行态：加载已入网身份（或本机 dev 回退）→ 连 NATS →
 // 签名注册 → 心跳 → 监听任务。
-func runCmd(_ []string) {
+func runCmd(args []string) {
+	// --ws / MESHMIND_WS_URL：覆盖落盘的 Hub 地址（换自定义域名/加兜底时无需重新入网）
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	wsOverride := fs.String("ws", "", "覆盖 Hub WebSocket 地址（如 wss://hub.example.com/agent/<id>）")
+	_ = fs.Parse(args)
+
 	id, cfg, err := identity.Load()
 	signed := true
 	if err != nil {
@@ -35,7 +41,10 @@ func runCmd(_ []string) {
 	}
 	manifest := capability.Detect(id.DeviceID, agentVersion)
 
-	// Cloudflare 版：有 ws_url 则走 WebSocket 传输。
+	// Cloudflare 版：有 ws_url 则走 WebSocket 传输。可用 --ws / MESHMIND_WS_URL 覆盖。
+	if v := envOr("MESHMIND_WS_URL", *wsOverride); v != "" {
+		cfg.WSURL = v
+	}
 	if cfg.WSURL != "" {
 		runWS(id, cfg, manifest)
 		return
