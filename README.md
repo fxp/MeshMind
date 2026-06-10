@@ -78,7 +78,8 @@ go build -o meshmind-agent ./agent
 - [x] 架构设计 v2.0（Cloudflare 边缘 + BigModel 推理）
 - [x] **Cloudflare Hub**：Worker + Hub Durable Object（WS Hibernation）+ 入网 + 注册表 + 规则编排 + 离线信箱
   - [x] 管理面鉴权：`/admin` `/goal` `/devices` 需 admin token
-  - [x] **已部署上线**：`https://meshmind-hub.fxp007.workers.dev`（真机经公网入网 + goal 下发汇聚已验证）
+  - [x] **已部署上线**：自定义域名 `https://hub.xiaopingfeng.com`（绕开 workers.dev 被墙）+ 回退 `meshmind-hub.fxp007.workers.dev`
+  - [x] 自动部署：`make deploy` / `bash cloudflare/scripts/deploy.sh`（认证存 `cloudflare/.deploy.env`）
 - [ ] P2.5 GLM 规划器（BigModel，听懂自然语言目标）
 - [ ] P3 子 Agent 本地 agentic loop（DO + alarm 分步驱动）
 - [x] 架构设计（DESIGN.md v1.0，已被 v2.0 取代部分）
