@@ -15,3 +15,5 @@ cloudflare/.wrangler/
 cloudflare/dist/
 
 .dev.vars
+
+cloudflare/.deploy.env

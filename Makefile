@@ -33,3 +33,7 @@ clean: nats-stop
 # 下发编排目标：make goal G="shell-all uname -a"
 goal:
 	cd master && npm run -s goal -- $(G)
+
+# 部署 Cloudflare Hub（需先放好 cloudflare/.deploy.env 或 wrangler login）
+deploy:
+	bash cloudflare/scripts/deploy.sh
