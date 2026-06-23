@@ -96,3 +96,19 @@ ENC=$(curl -s -H "authorization: Bearer $ADMIN_TOKEN" -X POST \
 | `/agent/<id>` | WS | 设备长连接（`?token=<bearer>`） |
 | `/devices` | GET | 在线设备 + 能力 |
 | `/goal` | POST | 编排目标 `{goal}` → 并行下发 + 汇聚 |
+| `/admin/prune` | POST | 清理离线设备记录 |
+| `/.well-known/agent-card.json` | GET | A2A 聚合 Agent Card（公开，仅在线设备） |
+| `/a2a/<device>/.well-known/agent-card.json` | GET | A2A 单设备 Agent Card（公开发现） |
+| `/a2a/<device>` | POST | A2A JSON-RPC `message/send`（需 admin token），`metadata.skillId` 选 skill |
+
+### A2A（Agent2Agent）
+
+Hub 当 A2A 网关：每台设备的能力自动映射成 A2A skill（`llm.available`→`llm-inference`，
+shell→`shell-exec`），外部任意 A2A 客户端可发现并调用。示例（调本地推理）：
+
+```bash
+curl -s -H "authorization: Bearer $ADMIN" -X POST https://hub.xiaopingfeng.com/a2a/glm-office-2 -d '{
+  "jsonrpc":"2.0","id":"1","method":"message/send",
+  "params":{"message":{"role":"user","parts":[{"kind":"text","text":"你好"}]},
+            "metadata":{"skillId":"llm-inference"}}}'
+```

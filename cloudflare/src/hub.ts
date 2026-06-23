@@ -2,6 +2,15 @@
 // 职责：持有所有设备 WS 连接（Hibernation）、注册表、入网、编排、离线信箱、ed25519 验签。
 import { verifyEd25519, randomToken } from "./crypto.ts";
 import { rulePlan, type DeviceInfo, type PlannedTask, type TaskRequest } from "./planner.ts";
+import {
+  aggregateCard,
+  deviceCard,
+  taskFromMessage,
+  taskResultToA2A,
+  messageText,
+  rpcError,
+  type JsonRpcReq,
+} from "./a2a.ts";
 
 interface Env {
   HUB: DurableObjectNamespace;
@@ -39,9 +48,14 @@ export class Hub {
     const path = url.pathname;
     try {
       if (path === "/admin/enroll/new" && req.method === "POST") return this.enrollNew(req, url);
+      if (path === "/admin/prune" && req.method === "POST") return this.prune();
       if (path === "/enroll" && req.method === "POST") return this.enroll(req, url);
       if (path === "/goal" && req.method === "POST") return this.runGoal(req);
       if (path === "/devices") return this.devicesJson();
+      if (path === "/.well-known/agent-card.json") return this.a2aRoute(req, url, "");
+      if (path === "/a2a" || path.startsWith("/a2a/")) {
+        return this.a2aRoute(req, url, path.replace(/^\/a2a\/?/, ""));
+      }
       if (path.startsWith("/agent/")) return this.connectAgent(req, decodeURIComponent(path.slice(7)));
       return new Response("not found", { status: 404 });
     } catch (e) {
@@ -224,6 +238,74 @@ export class Hub {
 
   private async devicesJson(): Promise<Response> {
     return Response.json({ devices: await this.listDevices() });
+  }
+
+  // 清理离线设备记录（及其 bearer / 信箱）。
+  private async prune(): Promise<Response> {
+    const now = Date.now();
+    const removed: string[] = [];
+    const devs = await this.state.storage.list<DeviceRecord>({ prefix: "device:" });
+    for (const [key, rec] of devs) {
+      const online =
+        now - rec.lastSeen < HEARTBEAT_STALE_MS && this.state.getWebSockets(rec.deviceId).length > 0;
+      if (!online) {
+        await this.state.storage.delete(key);
+        await this.state.storage.delete(`mailbox:${rec.deviceId}`);
+        removed.push(rec.deviceId);
+      }
+    }
+    const bearers = await this.state.storage.list<string>({ prefix: "bearer:" });
+    for (const [key, owner] of bearers) {
+      if (removed.includes(owner)) await this.state.storage.delete(key);
+    }
+    return Response.json({ ok: true, removed });
+  }
+
+  // ---- A2A (Agent2Agent) 网关 ----
+  // GET /.well-known/agent-card.json | /a2a            → 聚合卡
+  // GET /a2a/<device>/.well-known/agent-card.json|/a2a/<device> → 单设备卡
+  // POST /a2a/<device>  (JSON-RPC message/send)        → 调用 skill
+  private async a2aRoute(req: Request, url: URL, rest: string): Promise<Response> {
+    const baseUrl = `${url.protocol}//${url.host}`;
+    // 聚合卡（只列在线设备 —— 离线的没法调用）
+    if (rest === "") {
+      const online = (await this.listDevices()).filter((d) => d.status === "online");
+      return Response.json(aggregateCard(online, { baseUrl }));
+    }
+    // 单设备卡
+    if (rest.endsWith("/.well-known/agent-card.json")) {
+      const id = decodeURIComponent(rest.slice(0, -"/.well-known/agent-card.json".length).replace(/\/$/, ""));
+      const d = (await this.listDevices()).find((x) => x.deviceId === id);
+      return d
+        ? Response.json(deviceCard(d, { baseUrl }))
+        : Response.json({ error: "unknown device" }, { status: 404 });
+    }
+    const deviceId = decodeURIComponent(rest.replace(/\/$/, ""));
+    if (req.method !== "POST") {
+      const d = (await this.listDevices()).find((x) => x.deviceId === deviceId);
+      return d
+        ? Response.json(deviceCard(d, { baseUrl }))
+        : Response.json({ error: "unknown device" }, { status: 404 });
+    }
+    return this.a2aInvoke(req, deviceId);
+  }
+
+  private async a2aInvoke(req: Request, deviceId: string): Promise<Response> {
+    const rpc = (await req.json()) as JsonRpcReq;
+    if (rpc?.jsonrpc !== "2.0") return Response.json(rpcError(rpc?.id ?? null, -32600, "invalid request"));
+    const d = (await this.listDevices()).find((x) => x.deviceId === deviceId);
+    if (!d) return Response.json(rpcError(rpc.id, -32001, "unknown device"));
+    if (d.status !== "online") return Response.json(rpcError(rpc.id, -32002, "device offline"));
+
+    if (rpc.method === "message/send") {
+      const text = messageText(rpc.params?.message);
+      const task = taskFromMessage(d, rpc.params?.metadata?.skillId, text, () => randomToken(8));
+      if (!task) return Response.json(rpcError(rpc.id, -32601, "skill not supported by device"));
+      const outcome = await this.dispatch({ deviceId, task });
+      const contextId = rpc.params?.message?.contextId ?? randomToken(8);
+      return Response.json(taskResultToA2A(rpc.id, contextId, task.task_id, outcome));
+    }
+    return Response.json(rpcError(rpc.id, -32601, "method not found: " + rpc.method));
   }
 
   // ---- 编排：规划 → 并行下发 → 汇聚 ----

@@ -15,8 +15,11 @@ interface Env {
   ADMIN_TOKEN?: string;
 }
 
-function needsAdmin(path: string): boolean {
-  return path === "/goal" || path === "/devices" || path.startsWith("/admin/");
+function needsAdmin(path: string, method: string): boolean {
+  if (path === "/goal" || path === "/devices" || path.startsWith("/admin/")) return true;
+  // A2A：卡片(GET)公开用于发现；调用(POST /a2a/*)需鉴权
+  if (path.startsWith("/a2a") && method === "POST") return true;
+  return false;
 }
 
 /** 常数时间比较（比对 SHA-256 摘要，避免长度/时序泄露）。 */
@@ -47,7 +50,7 @@ export default {
     if (url.pathname === "/" || url.pathname === "/health") {
       return Response.json({ ok: true, service: "meshmind-hub" });
     }
-    if (needsAdmin(url.pathname) && !(await authorizedAdmin(req, env))) {
+    if (needsAdmin(url.pathname, req.method) && !(await authorizedAdmin(req, env))) {
       return Response.json({ ok: false, error: "unauthorized (need admin token)" }, { status: 401 });
     }
     const id = env.HUB.idFromName("hub");
