@@ -9,13 +9,14 @@ export interface DeviceInfo {
     shell: { allow: string[]; deny_destructive: boolean };
     fs: { read: string[]; write: string[] };
     gpu: { available: boolean };
+    llm?: { available: boolean; endpoint: string; models: string[] };
     sensors: string[];
   };
 }
 
 export interface TaskRequest {
   task_id: string;
-  type: "echo" | "shell.run";
+  type: "echo" | "shell.run" | "llm.infer";
   payload: Record<string, unknown>;
   granted_capabilities: string[];
   deadline_sec: number;
@@ -38,6 +39,16 @@ function shellTask(cmd: string, args: string[]): TaskRequest {
     payload: { cmd, args },
     granted_capabilities: ["shell.run"],
     deadline_sec: 30,
+  };
+}
+
+function inferTask(prompt: string): TaskRequest {
+  return {
+    task_id: taskId(),
+    type: "llm.infer",
+    payload: { prompt }, // 不指定 model → 设备用本地首个模型
+    granted_capabilities: ["llm.infer"],
+    deadline_sec: 120,
   };
 }
 
@@ -81,6 +92,19 @@ export function rulePlan(goal: string, devices: DeviceInfo[]): PlannedTask[] {
       const d = online.find((x) => x.deviceId === deviceId);
       if (!d) return [];
       return [{ deviceId, rationale: "explicit target", task: shellTask(cmd, args) }];
+    }
+    case "infer-on": {
+      const [deviceId, ...promptParts] = rest;
+      const d = online.find((x) => x.deviceId === deviceId);
+      if (!d) return [];
+      return [{ deviceId, rationale: "explicit LLM target", task: inferTask(promptParts.join(" ")) }];
+    }
+    case "infer": {
+      // 路由到任意有本地 LLM 的在线设备
+      const prompt = rest.join(" ");
+      const d = online.find((x) => x.capabilities.llm?.available);
+      if (!d) throw new Error("没有在线的本地 LLM 设备");
+      return [{ deviceId: d.deviceId, rationale: "local LLM device", task: inferTask(prompt) }];
     }
     default:
       throw new Error(`规则规划器不认识的目标: "${verb}"（支持 shell-all / echo-all / shell-on）`);

@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -186,8 +187,65 @@ func executeTask(req taskRequest, m capability.Manifest) taskResult {
 		}
 	case "shell.run":
 		return execShell(req, m, start)
+	case "llm.infer":
+		return execLLM(req, m, start)
 	default:
 		return errResult(req.TaskID, "unknown task type: "+req.Type, start)
+	}
+}
+
+// execLLM 调本地 OpenAI 兼容端点（Ollama）做推理。payload: {model?, prompt}。
+func execLLM(req taskRequest, m capability.Manifest, start time.Time) taskResult {
+	if !m.Capabilities.LLM.Available {
+		return errResult(req.TaskID, "本设备无本地 LLM 能力", start)
+	}
+	var p struct {
+		Model  string `json:"model"`
+		Prompt string `json:"prompt"`
+	}
+	if err := json.Unmarshal(req.Payload, &p); err != nil {
+		return errResult(req.TaskID, "bad payload: "+err.Error(), start)
+	}
+	model := p.Model
+	if model == "" && len(m.Capabilities.LLM.Models) > 0 {
+		model = m.Capabilities.LLM.Models[0]
+	}
+	reqBody, _ := json.Marshal(map[string]any{
+		"model":    model,
+		"messages": []map[string]string{{"role": "user", "content": p.Prompt}},
+		"stream":   false,
+	})
+	timeout := time.Duration(req.DeadlineSec) * time.Second
+	if timeout <= 0 {
+		timeout = 120 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	httpReq, _ := http.NewRequestWithContext(ctx, "POST", m.Capabilities.LLM.Endpoint+"/chat/completions", strings.NewReader(string(reqBody)))
+	httpReq.Header.Set("content-type", "application/json")
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return errResult(req.TaskID, "推理请求失败: "+err.Error(), start)
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+		Error any `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return errResult(req.TaskID, "推理响应解析失败: "+err.Error(), start)
+	}
+	if len(out.Choices) == 0 {
+		return errResult(req.TaskID, "推理无结果", start)
+	}
+	return taskResult{
+		TaskID: req.TaskID, OK: true,
+		Result: map[string]any{"model": model, "content": out.Choices[0].Message.Content},
+		TookMs: time.Since(start).Milliseconds(),
 	}
 }
 

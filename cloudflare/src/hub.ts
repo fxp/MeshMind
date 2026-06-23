@@ -214,6 +214,7 @@ export class Hub {
           shell: { allow: [], deny_destructive: true },
           fs: { read: [], write: [] },
           gpu: { available: false },
+          llm: { available: false, endpoint: "", models: [] },
           sensors: [],
         },
       });
