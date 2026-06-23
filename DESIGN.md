@@ -124,6 +124,26 @@ Task Spec、规则规划器、可插拔 Planner 接口 —— 全部传输无关
 
 > BigModel（`open.bigmodel.cn`）在国内，CF 边缘出站可正常访问；问题只在「设备→Hub」一跳。
 
+### 传输线路决策：CF Hub 主用 / ZeroTier 冷备（2026-06-23）
+
+**决策**：L1 传输日常走 **CF Hub（中心化星型）**；**ZeroTier（P2P）作为备份线路，平时不启**。
+即架构是「A2A over CF Hub」，ZeroTier 是 CF 不可用时的故障切换预案，不常驻。
+
+**为什么够用**：CF Hub 零运维、永远在线、自定义域名中国大陆可达；P2P 直连的低延迟/私密
+对个人规模不是刚需。把 P2P 降为冷备，省掉每台设备装 mesh、维护直连的日常成本。
+
+**切换扳手（已就绪，无需新建设施）**：
+- 子 Agent 已支持 `--ws` / `MESHMIND_WS_URL` 覆盖 Hub 地址；并保留 NATS 传输（v1）。
+- v1 的 NATS+master、Tailscale/Headscale 部署脚本仍在 `infra/`+`master/`。
+
+**启用备份的运维预案（仅当 CF 不可用时）**：
+1. 在一台 ZeroTier 可达的机器上起备份 Hub（v1 NATS+master，或另一套 WS Hub）。
+2. 相关设备加入 ZeroTier 网。
+3. 把设备指向备份 Hub 的 ZT 地址（`MESHMIND_WS_URL=...` 或 v1 的 `NATS_URL=nats://<zt-ip>:4222`）。
+4. CF 恢复后切回。
+
+> 待办（要把冷备变成「一键切换」时再做）：子 Agent 加一个 `backup_ws_url` + 主用连不上 N 次后自动降级；以及把备份 Hub 容器化便于随起随停。当前为手动预案。
+
 ---
 
 ---
