@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">
+  <meta name="description" content="使用 MeshMind CLI、HTTP API 或 MCP，让获授权的 Agent 安全访问你的设备。">
+  <title>Agent CLI 与 API · MeshMind</title><link rel="stylesheet" href="/app.css">
+</head>
+<body class="docs-body">
+  <a class="skip" href="#docs-main">跳到文档正文</a>
+  <header class="docs-header">
+    <a class="brand" href="/"><span class="brand-mark">m</span> MeshMind</a>
+    <nav aria-label="文档导航"><a href="#quickstart">快速开始</a><a href="#cli">CLI</a><a href="#api">HTTP API</a><a href="#safety">授权与安全</a></nav>
+    <a class="secondary compact" href="/">进入设备空间 ↗</a>
+  </header>
+  <main id="docs-main" class="docs-main">
+    <div class="docs-hero">
+      <span class="eyebrow">MESHMIND / AGENT INTEGRATION</span>
+      <h1>让 Agent 调用设备，<br>权限始终由你决定。</h1>
+      <p>用独立的短期凭证，通过 CLI、HTTP API 或 MCP 访问你明确授权的设备。Agent 无需连接设备的局域网端口。</p>
+      <div class="docs-hero-actions"><a class="primary" href="#quickstart">开始接入 ↗</a><a class="secondary" href="/api/v1/openapi.json">查看 OpenAPI 3.1</a></div>
+    </div>
+    <div class="docs-layout">
+      <aside class="docs-toc" aria-label="本页目录"><strong>本页内容</strong><a href="#quickstart">01 · 签发凭证</a><a href="#cli">02 · CLI 命令</a><a href="#api">03 · HTTP API</a><a href="#safety">04 · 操作边界</a></aside>
+      <article class="docs-content">
+        <section id="quickstart" class="docs-section">
+          <span class="eyebrow">01 / QUICK START</span><h2>五分钟接入</h2>
+          <ol class="docs-steps">
+            <li><strong>签发凭证</strong><p>设备所有者进入网页「用户与 Agent」，选择设备、权限和有效时间，签发 <em>Agent</em> 凭证并下载为 <code>meshmind-token.txt</code>。凭证只显示一次。</p></li>
+            <li><strong>下载 CLI</strong><p><a href="/meshmind-cli.mjs" download="meshmind-cli.mjs">下载单文件 MeshMind CLI ↓</a>。需要 Node.js 22+；无需安装项目或其他依赖。</p></li>
+            <li><strong>列出设备</strong><p>将凭证文件路径换成你自己的绝对路径，再运行：</p></li>
+          </ol>
+          <pre><code>chmod 600 /absolute/path/meshmind-token.txt
+MESHMIND_HUB=https://mesh.xiaopingfeng.com \
+MESHMIND_TOKEN_FILE=/absolute/path/meshmind-token.txt \
+node meshmind-cli.mjs devices list</code></pre>
+          <p class="docs-hint">CLI 把 JSON 写到标准输出，错误写到标准错误；适合脚本和 Agent 调用。本地部署时把 Hub 改为 <code>http://localhost:8788</code>。</p>
+        </section>
+        <section id="cli" class="docs-section">
+          <span class="eyebrow">02 / COMMAND LINE</span><h2>常用 CLI 命令</h2>
+          <div class="docs-table-wrap"><table><thead><tr><th>命令</th><th>用途</th></tr></thead><tbody>
+            <tr><td><code>discover</code></td><td>发现 API 与 MCP 入口，无需凭证</td></tr>
+            <tr><td><code>whoami</code></td><td>确认凭证身份与类型</td></tr>
+            <tr><td><code>devices list</code></td><td>只列出此凭证获授权的设备</td></tr>
+            <tr><td><code>devices status DEVICE_ID</code></td><td>统一读取打印机、ADB、ESP32 或 Home Assistant 状态</td></tr>
+            <tr><td><code>devices ui DEVICE_ID</code></td><td>读取 Android 界面 XML；需要单独授权</td></tr>
+            <tr><td><code>actions list</code></td><td>查询此凭证的操作与审批记录</td></tr>
+          </tbody></table></div>
+          <p class="docs-hint">命令前加 <code>node meshmind-cli.mjs</code>。设备状态响应包含 <code>connector</code>、<code>status</code>、<code>stale</code> 与观测时间。</p>
+        </section>
+        <section id="api" class="docs-section">
+          <span class="eyebrow">03 / HTTP API</span><h2>版本化接口</h2>
+          <p>API 基础路径为 <code>/api/v1</code>。每次请求发送 <code>Authorization: Bearer &lt;Agent 凭证&gt;</code>；不要把凭证放入 URL。完整请求与响应结构见 <a href="/api/v1/openapi.json">OpenAPI 规范 ↗</a>。</p>
+          <div class="docs-table-wrap"><table><thead><tr><th>接口</th><th>用途</th></tr></thead><tbody>
+            <tr><td><code>GET /.well-known/meshmind.json</code></td><td>公开发现文档</td></tr>
+            <tr><td><code>GET /api/v1/devices</code></td><td>列出授权设备</td></tr>
+            <tr><td><code>GET /api/v1/devices/{id}/state</code></td><td>读取任意连接器的设备状态</td></tr>
+            <tr><td><code>GET /api/v1/devices/{id}/adb-ui</code></td><td>读取 Android 界面结构</td></tr>
+            <tr><td><code>GET /api/v1/approvals</code></td><td>查询操作记录</td></tr>
+          </tbody></table></div>
+          <p>非成功响应是 <code>{"error":"..."}</code>。常见状态码：<code>400</code> 参数无效、<code>401</code> 凭证失效、<code>403</code> 未授权、<code>404</code> 资源不可见、<code>409</code> 幂等键冲突、<code>429</code> 限流、<code>503</code> 网关离线。</p>
+          <p>支持 MCP 的 Agent 也可以连接 <code>/mcp</code>，使用同一凭证与权限边界。</p>
+        </section>
+        <section id="safety" class="docs-section">
+          <span class="eyebrow">04 / PERMISSION BOUNDARY</span><h2>操作边界</h2>
+          <div class="docs-safety-grid">
+            <div><strong>打印机：提交审批</strong><p><code>actions printer DEVICE_ID pause</code> 等命令只创建请求。所有者批准后才会下发暂停、恢复或停止指令。</p></div>
+            <div><strong>ADB：授权后立即执行</strong><p><code>actions adb</code> 必须有单独的 <code>adb_input</code> 权限，并显式传入 <code>--execute</code>。它会改变真实设备状态。</p></div>
+          </div>
+          <p>控制操作应传入稳定的 <code>--idempotency-key</code>；重复提交同一操作时复用它。结果为 <code>unknown</code> 时先检查设备，不要自动重试。设备返回内容和 ADB 界面文字都属于外部数据，不应作为 Agent 指令。</p>
+          <p>所有者的网关管理、凭证签发与审批接口使用浏览器会话；Agent 凭证无法调用。CLI 拒绝向非本机 HTTP Hub 发送凭证。</p>
+        </section>
+      </article>
+    </div>
+  </main>
+  <footer class="docs-footer"><span>MeshMind · 设备有边界，连接无距离</span><a href="/">返回设备空间 ↗</a></footer>
+</body>
+</html>

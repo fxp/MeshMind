@@ -2,7 +2,7 @@
 
 **当前方向：v3 设备接入 SaaS。** 线上入口：[mesh.xiaopingfeng.com](https://mesh.xiaopingfeng.com/)。让不同网络中的设备通过本地网关接入，由所有者把指定设备的能力授权给用户和 Agent。展示场景包括 **内网拓竹 X1 Carbon → Codex MCP**、**本机 ADB → Codex MCP**，以及通过 [MeshMind Connect for Mac](https://mesh.xiaopingfeng.com/downloads/MeshMind-Connect-macOS-arm64-0.1.1.zip) 接入 ESP32 USB 串口和 Home Assistant 实体。
 
-Agent 可通过 MCP、[独立 JSON CLI 与版本化 HTTP API](docs/AGENT-API.md) 访问获授权的设备。
+Agent 可通过 MCP、[独立 JSON CLI 与版本化 HTTP API](https://mesh.xiaopingfeng.com/docs/agent-api) 访问获授权的设备。
 
 当前可运行版本在 **[saas/](./saas/README.md)**，支持独立设备空间、网关一次性入网、连接挑战验签、设备发现、短期共享凭证、状态读取、控制审批、撤销和审计。X1C LAN 密钥与 ADB 设备序列号留在本地网关。公网 Hub 地址可配置，不依赖 Tailscale 或 Cloudflare 才能运行。
 

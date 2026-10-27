@@ -44,6 +44,11 @@ test("SaaS tenant, gateway, delegation, approval and MCP boundaries", async t =>
     await until(async () => (await call("/api/devices", undefined, owner)).body.devices.length === 1);
     const device = (await call("/api/devices", undefined, owner)).body.devices[0];
     await t.test("versioned Agent API exposes a public contract and scoped unified state", async () => {
+      const guide = await fetch(base + "/docs/agent-api");
+      assert.equal(guide.status, 200);
+      assert.match(await guide.text(), /MeshMind CLI/);
+      const landing = await fetch(base + "/");
+      assert.match(await landing.text(), /href="\/docs\/agent-api"/);
       const discovery = await call("/.well-known/meshmind.json");
       assert.equal(discovery.status, 200);
       assert.equal(discovery.body.apiVersion, "v1");

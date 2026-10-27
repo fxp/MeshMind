@@ -152,7 +152,7 @@ npm run gateway -- --config gateway.x1c.json --enroll /absolute/path/enrollment.
 
 ## Codex / 其他 MCP 客户端
 
-Agent 也可以直接使用 JSON CLI 和版本化 HTTP API，无需 MCP 客户端；参见 [Agent CLI 与 API 指南](../docs/AGENT-API.md)。网页「用户与 Agent」提供 CLI 下载和 OpenAPI 入口。
+Agent 也可以直接使用 JSON CLI 和版本化 HTTP API，无需 MCP 客户端；参见[网页接入指南](https://mesh.xiaopingfeng.com/docs/agent-api)或仓库中的[Agent CLI 与 API 指南](../docs/AGENT-API.md)。登录页和「用户与 Agent」均提供入口。
 
 MCP 使用官方 SDK，同时提供直接连接的 Streamable HTTP 入口和本地 stdio 桥接。两种方式共用以下八个工具及同一套权限、审批和审计规则：
 

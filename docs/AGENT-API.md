@@ -1,5 +1,7 @@
 # MeshMind Agent CLI 与 HTTP API
 
+公开网页指南：[mesh.xiaopingfeng.com/docs/agent-api](https://mesh.xiaopingfeng.com/docs/agent-api)。
+
 MeshMind 的公网 Hub 为每个 Agent 签发独立、可撤销的访问凭证，按设备、能力和有效时间限制访问。设备通过出站网关接入，Agent 不需要知道设备所在局域网的地址或密钥。当前线上 Hub 是 `https://mesh.xiaopingfeng.com`。
 
 ## 五分钟接入

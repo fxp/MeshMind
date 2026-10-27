@@ -22,7 +22,7 @@
       <p id="google-hint" class="fine google-hint">正在检查登录方式…</p><div class="auth-divider">或使用邮箱和密码</div>
       <form id="account-form"><label>邮箱<input name="email" type="email" autocomplete="username" required maxlength="200" placeholder="you@example.com"></label><label>密码<input id="password" name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required placeholder="至少 12 个字符"></label><button id="account-submit" class="primary" type="submit">登录设备空间 ↗</button></form>
       <button id="switch-auth" class="text-button" type="button">第一次使用？创建账号</button><div class="auth-divider">受邀用户 / Agent</div>
-      <form id="token-login"><label>使用共享访问凭证<input name="token" type="password" required autocomplete="off" placeholder="设备所有者提供的访问凭证"></label><button class="secondary" type="submit">进入获授权的设备</button></form><p class="fine">共享凭证仅保存在当前页面内存中。刷新后需重新输入。</p>
+      <form id="token-login"><label>使用共享访问凭证<input name="token" type="password" required autocomplete="off" placeholder="设备所有者提供的访问凭证"></label><button class="secondary" type="submit">进入获授权的设备</button></form><p class="fine">共享凭证仅保存在当前页面内存中。刷新后需重新输入。</p><p class="fine auth-api-link">Agent 接入：<a href="/docs/agent-api">CLI / API 文档 ↗</a> · <a href="/api/v1/openapi.json">OpenAPI 规范 ↗</a></p>
       <div class="download-invite"><strong>让 Mac 连接你的设备</strong><p>安装 MeshMind Connect，将本机 ADB、ESP32 USB 串口或 Home Assistant 接入设备空间。</p><a class="secondary compact" href="/downloads/MeshMind-Connect-macOS-arm64-0.1.1.zip">下载 macOS 程序 ↗</a><small>Apple Silicon · macOS 14+ · 开发预览版</small></div>
     </div>
   </section>
@@ -36,7 +36,7 @@
         <button class="nav" data-view="approvals" type="button"><span>⊙</span> 操作记录 <span id="approval-count" class="count">0</span></button>
         <button class="nav owner-only" data-view="audit" type="button"><span>≡</span> 访问记录</button>
       </nav>
-      <div class="sidebar-note"><span class="eyebrow">连接原则</span><p>凭证留在本地。<br>能力按需开放。<br>操作全程留痕。</p></div><div class="account"><span id="account-name"></span><button id="google-link" type="button" class="text-button" hidden>关联 Google 登录</button><button id="logout" type="button" class="text-button">退出 ↗</button></div>
+      <div class="sidebar-note"><span class="eyebrow">连接原则</span><p>凭证留在本地。<br>能力按需开放。<br>操作全程留痕。</p><a href="/docs/agent-api">CLI / API 文档 ↗</a></div><div class="account"><span id="account-name"></span><button id="google-link" type="button" class="text-button" hidden>关联 Google 登录</button><button id="logout" type="button" class="text-button">退出 ↗</button></div>
     </aside>
     <main id="main" class="main" tabindex="-1">
       <header class="topbar"><span>WORKSPACE / <span id="view-label">设备总览</span></span><span class="environment">EARLY ACCESS · 设备云</span></header>
@@ -64,7 +64,7 @@
           <label>MCP 服务地址<div class="copy-field"><input id="mcp-url" readonly><button id="copy-mcp-url" type="button" class="secondary">复制地址</button></div></label>
           <p id="mcp-reachability" class="fine"></p>
           <details><summary>在 Codex 中配置</summary><p>先下载刚签发的凭证文件。在启动 Codex 的终端中执行以下命令，把文件路径换成你的实际路径：</p><pre id="mcp-command"></pre><button id="copy-mcp-command" type="button" class="secondary compact">复制配置命令</button><p class="fine">随后在同一个终端启动 Codex。访问凭证由环境变量提供，不写进 MCP 地址或 Codex 配置文件。其他 Agent 使用 Bearer 认证填写该凭证。</p><p class="fine">Codex 桌面应用如果无法继承此环境变量，可继续按项目说明使用本地桥接程序。</p></details>
-          <details><summary>CLI / API 接入</summary><p>下载独立 CLI，使用刚签发的凭证文件读取设备。CLI 输出 JSON，适合 Agent 和自动化脚本。</p><p><a href="/meshmind-cli.mjs" download="meshmind-cli.mjs">下载 MeshMind CLI ↓</a> · <a href="/api/v1/openapi.json" target="_blank" rel="noopener">查看 OpenAPI 规范 ↗</a></p><pre id="cli-command"></pre><p class="fine">读取任意设备状态：<code>node meshmind-cli.mjs devices status dev_...</code>。打印机控制先提交审批；ADB 输入在单独授权后会立即执行。</p></details>
+          <details><summary>CLI / API 接入</summary><p>下载独立 CLI，使用刚签发的凭证文件读取设备。CLI 输出 JSON，适合 Agent 和自动化脚本。</p><p><a href="/meshmind-cli.mjs" download="meshmind-cli.mjs">下载 MeshMind CLI ↓</a> · <a href="/docs/agent-api">阅读完整接入文档 ↗</a> · <a href="/api/v1/openapi.json" target="_blank" rel="noopener">查看 OpenAPI 规范 ↗</a></p><pre id="cli-command"></pre><p class="fine">读取任意设备状态：<code>node meshmind-cli.mjs devices status dev_...</code>。打印机控制先提交审批；ADB 输入在单独授权后会立即执行。</p></details>
         </div>
         <div class="section-label"><h2>当前访问凭证</h2></div><div id="principals" class="row-list"></div>
       </section>

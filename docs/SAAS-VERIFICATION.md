@@ -1,8 +1,14 @@
 # v3 本地交付验证 · 2026-10-26
 
+## 2026-10-27 公开 Agent 文档
+
+- Cloudflare 版本 `70776663-ba18-4167-9371-2ea8e885f673` 已部署到 `mesh.xiaopingfeng.com`。公开页面 `/docs/agent-api`、CLI 下载和 OpenAPI 3.1 均返回 200，无需登录；登录页与授权面板均提供文档入口。
+- 本地浏览器检查了文档页面、登录页跳转和控制台错误；375px 手机宽度无横向溢出。线上 CLI 下载文件与本地文件 SHA-256 一致。
+- TypeScript、Cloudflare 类型检查和 48 项测试通过。文档页面不包含真实凭证或设备密钥。
+
 ## 2026-10-27 Agent CLI / API 更新
 
-- Cloudflare 版本 `7c0adafc-2c5d-43d1-ad2c-a702c6cfa408` 已发布到 `mesh.xiaopingfeng.com`。独立 CLI 下载文件与本地构建的 SHA-256 一致；公开发现入口和 OpenAPI 3.1 均返回 200。
+- 首次 Cloudflare 版本 `7c0adafc-2c5d-43d1-ad2c-a702c6cfa408` 已发布到 `mesh.xiaopingfeng.com`。独立 CLI 下载文件与本地构建的 SHA-256 一致；公开发现入口和 OpenAPI 3.1 均返回 200。
 - 使用当前只读 Agent 凭证验证公网 `whoami` 与 `devices list`，只列出获授权的 ADB 设备；凭证只存在本机 0600 文件中。公网 `/api/v1` 由 Worker 映射到既有 Hub 权限路由，长连接中的旧 Durable Object 实例也能立即使用新入口。
 - 统一状态读取已由本地 HTTP/WSS 集成测试覆盖；线上实际调用返回 502，因为本机 `adb devices -l` 当前没有列出 USB 设备。没有向真实 Android 设备发送输入。
 - 本地 TypeScript、Cloudflare TypeScript 与 48 项测试通过，新增 CLI 凭证范围、危险操作显式执行、版本化路由和统一状态测试。当前 ADB 输入在单独授予 `adb_input` 后直接执行，打印机控制继续要求所有者审批；下方旧记录描述的是当时的实现。

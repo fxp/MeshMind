@@ -124,9 +124,11 @@ export default {
       }
       return new Response(request.method === "HEAD" ? null : object.body, {status,headers});
     }
-    if ((request.method === "GET" || request.method === "HEAD") && ["/","/app.js","/app.css","/meshmind-cli.mjs","/favicon.ico"].includes(url.pathname)) {
+    if ((request.method === "GET" || request.method === "HEAD") && ["/","/docs/agent-api","/app.js","/app.css","/meshmind-cli.mjs","/favicon.ico"].includes(url.pathname)) {
       if (url.pathname === "/favicon.ico") return new Response(null,{status:204});
-      const asset = await env.ASSETS.fetch(request);
+      // Static Assets canonicalizes *.html to extensionless URLs.
+      const assetUrl = url.pathname === "/docs/agent-api" ? new URL("/agent-api", url.origin) : url;
+      const asset = await env.ASSETS.fetch(new Request(assetUrl, request));
       const response = new Response(asset.body,asset);
       response.headers.set("cache-control","no-store");
       response.headers.set("x-content-type-options","nosniff");
