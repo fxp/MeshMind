@@ -25,7 +25,7 @@
 - `/mcp` 使用官方 Streamable HTTP 客户端完成初始化、七个工具发现、读取模拟器状态及提交审批。覆盖不同租户客户端交错调用、只读凭证拒绝控制、幂等申请、所有者审批后模拟状态改变、原客户端凭证到期／撤销失效，以及 Cookie／URL 凭证、恶意 Host／Origin、批量及超大请求拒绝。
 - ADB 测试覆盖固定本机 ADB 服务与单个序列号、状态与界面结构读取的独立授权、非法字符拒绝、跨租户隔离、审批前零输入、审批参数展示与幂等、批准后单次执行、凭证撤销。没有测试任意 shell 执行，因为未提供该能力。
 - 「用户与 Agent」提供直接 MCP 地址、Codex 环境变量配置命令和本机地址可达性提示；浏览器已检查页面展示。
-- 最新 Cloudflare 版本：`a6abd587-0fb8-40ff-81dc-8a2cb2d48294`。Google-only 页面、四个旧密码接口的边缘 HTTP 410 拦截、HTTPS 页面和文档、未授权 MCP 拒绝均已验证；49 项自动化测试通过。安全检查见 [2026-10-27 报告](SECURITY-REVIEW-2026-10-27.md)。
+- 最新 Cloudflare 版本：`1e6af7f8-d720-40f7-9ff2-50aeda9428ed`。Google-only 页面、四个旧密码接口的边缘 HTTP 410 拦截、HTTPS 页面和文档、未授权 MCP 拒绝均已验证；49 项自动化测试通过。安全检查见 [2026-10-27 报告](SECURITY-REVIEW-2026-10-27.md)。
 - Cloudflare Worker `meshmind-saas` 已部署到 `https://mesh.xiaopingfeng.com`，静态页面、HTTPS、安全响应头和未授权 MCP 拒绝通过。旧 `meshmind-hub` 原型独立保留。
 - Cloudflare 本地运行时完成 9 项完整流程检查，使用持久化 Durable Objects SQLite；重启运行时后原账号登录通过。测试包含真实 HTTP/WebSocket 连接，设备为模拟器。
 - 线上真实 Google 账号登录、HTTPS 回调及 Secure / HttpOnly 会话已验证。随后使用该所有者会话完成同一套 9 项线上检查，包含多次 MCP 请求、状态读取、所有者批准、凭证撤销及网关撤销。测试创建的访问凭证和模拟网关均已撤销，未创建公网默认账号或密码。
