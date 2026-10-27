@@ -1,0 +1,37 @@
+# Configure DOMAIN before starting. Local testing uses compose.local.yml.
+services:
+  hub:
+    build:
+      context: ..
+      dockerfile: saas/Dockerfile
+    environment:
+      PUBLIC_URL: https://${DOMAIN:?Set DOMAIN to the public Hub hostname}
+      ALLOW_SIGNUP: ${ALLOW_SIGNUP:-false}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - hub-data:/data
+    init: true
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+  ingress:
+    image: caddy:2
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN to the public Hub hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      hub:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  hub-data:
+  caddy-data:
+  caddy-config:

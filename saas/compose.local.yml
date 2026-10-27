@@ -1,0 +1,22 @@
+services:
+  hub:
+    build:
+      context: ..
+      dockerfile: saas/Dockerfile
+    ports:
+      - "127.0.0.1:8788:8788"
+    environment:
+      PUBLIC_URL: http://localhost:8788
+      ALLOW_SIGNUP: "true"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - hub-data:/data
+    init: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+volumes:
+  hub-data:

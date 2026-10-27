@@ -1,0 +1,9 @@
+{
+  "devices": [{
+    "localId": "x1c-showcase",
+    "name": "工作室 X1C · 模拟设备",
+    "model": "Bambu Lab X1 Carbon (simulated)",
+    "connector": "simulator",
+    "allowControl": true
+  }]
+}

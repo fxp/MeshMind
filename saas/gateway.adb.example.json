@@ -1,0 +1,13 @@
+{
+  "devices": [
+    {
+      "localId": "android-usb",
+      "name": "My Android device",
+      "model": "Android via local ADB",
+      "connector": "adb",
+      "adbSerial": "REPLACE_WITH_ADB_SERIAL",
+      "allowUiDump": false,
+      "allowControl": false
+    }
+  ]
+}

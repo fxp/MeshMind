@@ -1,0 +1,14 @@
+.git
+**/node_modules
+**/data
+**/.env
+**/.env.*
+**/.dev.vars
+**/.deploy.env
+**/gateway.json
+**/gateway.x1c.json
+**/enrollment*.json
+**/*token*.txt
+**/*.pem
+**/.gstack
+**/.wrangler

@@ -17,3 +17,23 @@ cloudflare/dist/
 .dev.vars
 
 cloudflare/.deploy.env
+.gstack/
+
+# Local gateway identities, enrollment files and printer credentials.
+saas/local-gateway/
+saas/local-gateway-state/
+saas/gateway.json
+saas/gateway.x1c.json
+saas/gateway.adb.json
+saas/enrollment*.json
+saas/**/enrollment*.json
+saas/*token*.txt
+saas/*.pem
+saas/macos/build/
+saas/macos/dist/
+!saas/.env.example
+
+# Cloudflare SaaS local runtime state.
+saas/cloudflare/.wrangler/
+
+.wrangler/

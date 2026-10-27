@@ -1,0 +1,70 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "meshmind-saas",
+  "main": "worker.ts",
+  "account_id": "0356d59ccdcff356bf3bbdb580bbaa60",
+  "compatibility_date": "2026-10-26",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "mesh.xiaopingfeng.com",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "PUBLIC_URL": "https://mesh.xiaopingfeng.com",
+    "ALLOW_SIGNUP": "true"
+  },
+  "assets": {
+    "directory": "../public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "r2_buckets": [
+    { "binding": "RELEASES", "bucket_name": "meshmind-releases" }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "SAAS_HUB",
+        "class_name": "SaasHub"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "SaasHub"
+      ]
+    }
+  ],
+  "alias": {
+    "node:sqlite": "./unsupported-sqlite.ts",
+    "ws": "./unsupported-ws.ts"
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": false
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1
+    }
+  },
+  "limits": {
+    "cpu_ms": 30000
+  },
+  "secrets": {
+    "required": [
+      "GOOGLE_CLIENT_ID",
+      "GOOGLE_CLIENT_SECRET"
+    ]
+  }
+}

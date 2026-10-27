@@ -1,4 +1,21 @@
 # MeshMind 本地开发命令
+.DEFAULT_GOAL := help
+.PHONY: help saas saas-check saas-container
+
+help:
+	@echo "MeshMind v3: make saas | make saas-check | make saas-container"
+	@echo "首次运行：cd saas && npm ci；说明见 saas/README.md"
+
+saas:
+	cd saas && npm start
+
+saas-check:
+	cd saas && npm run typecheck && npm test
+
+saas-container:
+	docker compose -f saas/compose.local.yml up --build -d
+
+# 以下是 v1/v2 历史开发入口。
 .PHONY: nats nats-stop master agent agent2 task-echo clean
 
 # 启动 NATS（JetStream）。本机无 docker compose 插件，用 docker run。
@@ -34,6 +51,10 @@ clean: nats-stop
 goal:
 	cd master && npm run -s goal -- $(G)
 
-# 部署 Cloudflare Hub（需先放好 cloudflare/.deploy.env 或 wrangler login）
-deploy:
+# v2 历史部署，显式命名以免将旧原型误作 SaaS 发布。
+deploy-legacy-cloudflare:
 	bash cloudflare/scripts/deploy.sh
+
+deploy:
+	@echo "v3 SaaS 部署入口：saas/compose.public.yml；先按 saas/README.md 配置域名与 HTTPS。"
+	@echo "v2 历史 Cloudflare 部署：make deploy-legacy-cloudflare"

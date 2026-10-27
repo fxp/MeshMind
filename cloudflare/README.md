@@ -1,5 +1,7 @@
 # MeshMind Hub — Cloudflare 控制平面
 
+> v2 历史原型，当前 SaaS 开发入口已迁移到 [../saas/README.md](../saas/README.md)。此目录未实现多租户隔离，不作为 SaaS 对外发布入口。历史部署命令为 `make deploy-legacy-cloudflare`。
+
 除模型推理走 BigModel(GLM) 外，连接中枢/队列/存储/编排全部跑在 Cloudflare。
 架构见 [../DESIGN.md §0](../DESIGN.md)。
 

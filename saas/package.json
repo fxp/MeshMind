@@ -1,0 +1,47 @@
+{
+  "name": "meshmind-saas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": { "meshmind": "./bin/meshmind.mjs" },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "predev": "node scripts/sync-cli.mjs",
+    "start": "tsx src/main.ts",
+    "prestart": "node scripts/sync-cli.mjs",
+    "gateway": "tsx src/gateway.ts",
+    "mcp": "tsx src/mcp.ts",
+    "cli": "node bin/meshmind.mjs",
+    "sync:cli": "node scripts/sync-cli.mjs",
+    "setup-codex": "tsx src/setup-codex.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts test/*.test.mjs",
+    "cf:dev": "wrangler dev -c cloudflare/wrangler.jsonc --port 8790 --local-upstream localhost:8790 --var PUBLIC_URL:http://localhost:8790",
+    "cf:typecheck": "tsc -p cloudflare/tsconfig.json",
+    "cf:types": "wrangler types cloudflare/worker-configuration.d.ts -c cloudflare/wrangler.jsonc",
+    "cf:deploy": "wrangler deploy -c cloudflare/wrangler.jsonc",
+    "precf:deploy": "node scripts/sync-cli.mjs",
+    "cf:smoke": "tsx scripts/cloudflare-smoke.ts",
+    "mac:smoke": "tsx scripts/smoke-mac-bundle.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "google-auth-library": "^11.3.1",
+    "mqtt": "^5.13.0",
+    "tsx": "^4.19.2",
+    "ws": "^8.18.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/ws": "^8.18.0",
+    "typescript": "^5.7.2",
+    "wrangler": "^4.152.0"
+  },
+  "overrides": {
+    "undici": "^7.30.1"
+  }
+}

@@ -1,0 +1,18 @@
+# Run at the printer's location, connecting to an HTTPS Hub.
+# Prepare ./local-gateway/{gateway.json,enrollment.json,printer-certificate.pem}.
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: saas/Dockerfile
+    user: "${GATEWAY_UID:-1000}:${GATEWAY_GID:-1000}"
+    command: [node, node_modules/tsx/dist/cli.mjs, src/gateway.ts, --config, /config/gateway.json, --enroll, /config/enrollment.json, --state, /state/identity.json]
+    volumes:
+      - ./local-gateway:/config:ro
+      - ./local-gateway-state:/state
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]

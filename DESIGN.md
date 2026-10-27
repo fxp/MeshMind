@@ -1,5 +1,7 @@
 # MeshMind — 个人设备网格 · 分层 AI 多智能体系统
 
+> **v3 更新：本文件是 v1/v2 历史设计。当前项目改为设备接入 SaaS，以多网络网关、租户隔离、能力授权和 X1C → Codex 为首个展示场景。当前架构见 [docs/SAAS-ARCHITECTURE.md](./docs/SAAS-ARCHITECTURE.md)，运行入口见 [saas/README.md](./saas/README.md)。下文 Cloudflare／Tailscale“确定版”决策不再是当前默认。**
+
 > 设计文档 v2.0 · 2026-06-09
 > 工作代号 **MeshMind**（可改名）。本文是后续开发的基线，任何架构变更先改本文再动代码。
 >

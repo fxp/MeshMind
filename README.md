@@ -1,5 +1,38 @@
 # MeshMind
 
+**当前方向：v3 设备接入 SaaS。** 线上入口：[mesh.xiaopingfeng.com](https://mesh.xiaopingfeng.com/)。让不同网络中的设备通过本地网关接入，由所有者把指定设备的能力授权给用户和 Agent。展示场景包括 **内网拓竹 X1 Carbon → Codex MCP**、**本机 ADB → Codex MCP**，以及通过 [MeshMind Connect for Mac](https://mesh.xiaopingfeng.com/downloads/MeshMind-Connect-macOS-arm64-0.1.1.zip) 接入 ESP32 USB 串口和 Home Assistant 实体。
+
+Agent 可通过 MCP、[独立 JSON CLI 与版本化 HTTP API](docs/AGENT-API.md) 访问获授权的设备。
+
+当前可运行版本在 **[saas/](./saas/README.md)**，支持独立设备空间、网关一次性入网、连接挑战验签、设备发现、短期共享凭证、状态读取、控制审批、撤销和审计。X1C LAN 密钥与 ADB 设备序列号留在本地网关。公网 Hub 地址可配置，不依赖 Tailscale 或 Cloudflare 才能运行。
+
+```bash
+cd saas
+npm ci
+npm start
+# 打开 http://localhost:8788，创建账号，然后按页面接入模拟 X1C、真实 X1C 或本机 ADB。
+```
+
+容器运行：
+
+```bash
+docker compose -f saas/compose.local.yml up --build -d
+```
+
+完整演示、Mac 程序、X1C / ADB 本地配置、Codex 接入、容器部署及当前限制见 [saas/README.md](./saas/README.md)。架构见 [docs/SAAS-ARCHITECTURE.md](./docs/SAAS-ARCHITECTURE.md)。
+
+**交付状态：本地／容器 MVP 与 Apple Silicon Mac 开发预览版，已部署 Cloudflare 公网试用版。** 模拟流程有自动化集成测试；本机 ADB 已通过真实设备状态与界面结构读取验证，Home Assistant 通过模拟服务集成测试，ESP32 串口仍需实物联调。Mac 版尚未 Apple Developer ID 签名或公证。真实 X1C 仍需按设备固件与证书联调。当前按设备能力接入，通用 TCP/UDP 组网、虚拟 IP 和远程桌面还没有实现。
+
+| 目录 | 当前定位 |
+|---|---|
+| `saas/` | v3 当前入口：多租户 Hub、管理页面、地点网关、X1C／模拟器／ADB／ESP32／Home Assistant、MCP、Mac 程序 |
+| `docs/SAAS-ARCHITECTURE.md` | v3 架构、安全边界与后续演进 |
+| `cloudflare/` | v2 单所有者 Cloudflare Hub，历史原型，尚未迁移为 SaaS |
+| `agent/`、`master/`、`infra/` | v1/v2 Go Agent、NATS 和网络实验，历史参考 |
+
+<details>
+<summary>v1 / v2 历史说明（原型记录，不作为 SaaS 部署指南）</summary>
+
 个人设备网格 · 分层 AI 多智能体系统。
 
 把名下所有设备接入一个**会自主推理的主 Agent**，它把目标分解后下发给每台设备上的
@@ -95,3 +128,5 @@ go build -o meshmind-agent ./agent
 
 > 注：本机当前无 `docker compose` 插件，故用 `docker run`（见 Makefile）。
 > 有 compose 时可改用 `infra/docker-compose.yml`。
+
+</details>
