@@ -9,7 +9,7 @@ import { createDeviceMcp } from "./mcp-tools.ts";
 import { WebSocketServer } from "ws";
 import { Store, manifest, type DeviceRow, type PrincipalRow, type ApprovalRow } from "./store.ts";
 import { Broker } from "./broker.ts";
-import { authenticate, canUse, requireOwner, hash, secret, id, bearer, parseBearer, passwordHash, passwordMatches, RateLimiter, type Actor } from "./auth.ts";
+import { authenticate, canUse, requireOwner, hash, secret, id, bearer, parseBearer, RateLimiter, type Actor } from "./auth.ts";
 import { HttpError, validate, permission, controlAction, adbInput } from "./schema.ts";
 import { GoogleLogin, GoogleLoginError, type GoogleOptions, type GoogleProvider } from "./google.ts";
 import { apiContract, discovery } from "./api-contract.ts";
@@ -24,8 +24,8 @@ export interface AppOptions {
   serveStatic?: boolean;
   google?: GoogleOptions;
   googleProvider?: GoogleProvider;
+  trustedClientIpHeader?: boolean;
 }
-const credentials = z.object({ email: z.string().trim().email().max(200).transform(s => s.toLowerCase()), password: z.string().min(12).max(128) }).strict();
 const nameInput = z.object({ name: z.string().trim().min(1).max(80) }).strict();
 const principalInput = z.object({
   name: z.string().trim().min(1).max(80), kind: z.enum(["user", "agent"]),
@@ -53,12 +53,11 @@ export function createApp(options: AppOptions) {
   const google = options.google ? new GoogleLogin(store, origin, options.google, options.allowSignup, options.googleProvider) : undefined;
   const broker = new Broker(store);
   const limiter = new RateLimiter();
-  let passwordWork = 0;
-  async function passwordJob<T>(fn: () => Promise<T>): Promise<T> {
-    if (passwordWork >= 4) throw new HttpError(429, "登录请求繁忙，请稍后再试");
-    passwordWork++;
-    try { return await fn(); } finally { passwordWork--; }
-  }
+  const clientIp = (req: IncomingMessage) => {
+    const forwarded = options.trustedClientIpHeader ? req.headers["x-meshmind-client-ip"] : undefined;
+    return typeof forwarded === "string" && forwarded.length > 0 && forwarded.length <= 64 && /^[A-Fa-f0-9:.]+$/.test(forwarded)
+      ? forwarded : req.socket.remoteAddress ?? "unknown";
+  };
   const wss = options.nativeWebSockets === false ? undefined : new WebSocketServer({ noServer: true, maxPayload: 65536 });
   const publicDir = options.serveStatic === false ? "" : fileURLToPath(new URL("../public/", import.meta.url));
 
@@ -200,7 +199,7 @@ export function createApp(options: AppOptions) {
     // MCP never authenticates with a browser owner's session or a URL token.
     if (req.headers.host !== new URL(origin).host) throw new HttpError(403, "MCP 站点地址不匹配");
     if (req.headers.origin && req.headers.origin !== origin) throw new HttpError(403, "MCP 请求来源不允许");
-    limiter.check("mcp-ip:" + (req.socket.remoteAddress ?? "unknown"), 300);
+    limiter.check("mcp-ip:" + clientIp(req), 300);
     if (!bearer(req)) throw new HttpError(401, "MCP 需要独立访问凭证");
     const actor = authenticate(store, req);
     limiter.check("mcp-actor:" + actor.id, 300);
@@ -273,7 +272,7 @@ export function createApp(options: AppOptions) {
     // No cross-origin state changes through cookies, including login CSRF.
     if (!["GET", "HEAD"].includes(method) && !req.headers.authorization && req.headers.origin !== origin)
       throw new HttpError(403, "请求来源不允许");
-    const ip = req.socket.remoteAddress ?? "unknown";
+    const ip = clientIp(req);
     if (path === "/api/auth/google" && method === "GET") {
       if (!google) throw new HttpError(503, "管理员尚未启用 Google 登录");
       limiter.check("google-start:" + ip, 20, 5 * 60_000);
@@ -293,23 +292,7 @@ export function createApp(options: AppOptions) {
       return;
     }
     if (path === "/api/register" || path === "/api/login") {
-      if (method !== "POST") throw new HttpError(405, "方法不支持");
-      limiter.check("auth-ip:" + ip, 100, 15 * 60_000);
-      const input = validate(credentials, await body(req));
-      limiter.check("auth-account:" + hash(input.email), 12, 15 * 60_000);
-      if (path === "/api/register") {
-        if (!options.allowSignup) throw new HttpError(403, "当前部署尚未开放注册");
-        const encoded = await passwordJob(() => passwordHash(input.password));
-        const tenant = id("acct_");
-        try { store.db.prepare("INSERT INTO accounts(id,email,password,created_at) VALUES(?,?,?,?)").run(tenant, input.email, encoded, Date.now()); }
-        catch (err) { if ((err as Error).message.includes("UNIQUE")) throw new HttpError(409, "该邮箱已注册"); throw err; }
-        session(res, tenant); store.audit(tenant, tenant, "account.created", tenant, "ok");
-        return json(res, { ok: true }, 201);
-      }
-      const account = store.db.prepare("SELECT * FROM accounts WHERE email=?").get(input.email) as { id: string; password: string } | undefined;
-      const valid = await passwordJob(() => passwordMatches(input.password, account?.password ?? "00000000000000000000000000000000:" + "00".repeat(64)));
-      if (!account || !valid) throw new HttpError(401, "邮箱或密码不正确");
-      session(res, account.id); return json(res, { ok: true });
+      throw new HttpError(410, "邮箱密码登录已停用，请使用 Google 账号");
     }
 
     if (path === "/api/gateways/enroll" && method === "POST") {
@@ -487,7 +470,7 @@ export function createApp(options: AppOptions) {
   }
   server.on("upgrade", (req, socket, head) => {
     try {
-      const row = authenticateGateway({url:req.url ?? "",authorization:req.headers.authorization,origin:req.headers.origin,ip:req.socket.remoteAddress ?? "unknown"});
+      const row = authenticateGateway({url:req.url ?? "",authorization:req.headers.authorization,origin:req.headers.origin,ip:clientIp(req)});
       if (!wss) throw new HttpError(503, "外部网关传输未配置");
       wss.handleUpgrade(req, socket, head, ws => broker.connect(ws, row.id));
     } catch { socket.end("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"); }

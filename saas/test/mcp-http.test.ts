@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createApp } from "../src/server.ts";
+import { seedOwner } from "./support/owner.ts";
 import { startGateway, localConfig } from "../src/gateway.ts";
 
 const unpack = (reply: any) => JSON.parse(reply.content[0].text);
@@ -35,8 +36,8 @@ test("remote MCP uses the same scoped device and approval boundaries", async t =
     mcpClients.push(client); await client.connect(transport); return client;
   };
   try {
-    const owner = (await api("/api/register", { email:"http-mcp@example.test", password:"a-long-test-password" })).cookie!;
-    const other = (await api("/api/register", { email:"http-mcp-other@example.test", password:"a-long-test-password" })).cookie!;
+    const owner = seedOwner(app.store, "http-mcp@example.test");
+    const other = seedOwner(app.store, "http-mcp-other@example.test");
     const grant = (await api("/api/gateways", {name:"MCP test gateway"}, owner)).value;
     gateways.push(await startGateway({ stateFile:join(dir,"gateway.json"), enrollment:{...grant.enrollment,hub:base},
       config:localConfig.parse({devices:[{localId:"x1c",name:"Remote MCP simulator",model:"X1C",connector:"simulator",allowControl:true}]}) }));

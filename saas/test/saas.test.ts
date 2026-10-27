@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { WebSocket } from "ws";
 import { createApp } from "../src/server.ts";
+import { seedOwner } from "./support/owner.ts";
 import { startGateway, localConfig, validateHub } from "../src/gateway.ts";
 import { normalizeReport } from "../src/connectors.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -34,10 +35,7 @@ test("SaaS tenant, gateway, delegation, approval and MCP boundaries", async t =>
   };
   const config = localConfig.parse({ devices: [{ localId: "x1c", name: "Studio X1C", model: "Bambu X1C (simulated)", connector: "simulator", allowControl: true }] });
   try {
-    const a = await call("/api/register", { email: "owner-a@example.test", password: "long-test-password-A" });
-    const b = await call("/api/register", { email: "owner-b@example.test", password: "long-test-password-B" });
-    assert.equal(a.status, 201); assert.equal(b.status, 201); assert.ok(a.cookie); assert.ok(b.cookie);
-    const owner = a.cookie!, other = b.cookie!;
+    const owner = seedOwner(app.store, "owner-a@example.test"), other = seedOwner(app.store, "owner-b@example.test");
     const grant = await call("/api/gateways", { name: "Studio gateway" }, owner);
     assert.equal(grant.status, 201);
     clients.push(await startGateway({ config, stateFile: join(dir, "gw-a.json"), enrollment: { ...grant.body.enrollment, hub: base } }));
@@ -134,7 +132,8 @@ test("SaaS tenant, gateway, delegation, approval and MCP boundaries", async t =>
       const invalidBearer = await fetch(base + "/api/gateways", { headers: { cookie: owner, authorization: "Bearer invalid" } });
       assert.equal(invalidBearer.status, 401);
       assert.equal((await call("/api/devices")).status, 401);
-      assert.equal((await call("/api/login", { email: "owner-a@example.test", password: "incorrect-long-password" })).status, 401);
+      for (const route of ["/api/register", "/api/login", "/api/v1/register", "/api/v1/login"])
+        assert.equal((await call(route, { email: "owner-a@example.test", password: "incorrect-long-password" })).status, 410);
     });
 
     await t.test("enrollment is one use and persistent credentials contain only hashes in Hub", async () => {

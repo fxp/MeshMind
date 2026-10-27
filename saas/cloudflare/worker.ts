@@ -35,7 +35,7 @@ export class SaasHub extends DurableObject<Env> {
     super(ctx, env);
     const store = new Store(":memory:", new DurableSqlite(ctx.storage));
     this.app = createApp({ database: ":memory:", store, publicUrl: env.PUBLIC_URL, allowSignup: env.ALLOW_SIGNUP === "true",
-      nativeWebSockets: false, serveStatic: false,
+      nativeWebSockets: false, serveStatic: false, trustedClientIpHeader: true,
       google: env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET ? {clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET} : undefined });
     this.ready = new Promise((resolve, reject) => {
       this.app.server.once("error", reject);
@@ -66,6 +66,21 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.origin !== new URL(env.PUBLIC_URL).origin) return new Response("Unknown site",{status:404});
+    // Durable Object HTTP uses a loopback Node adapter. Set this private header
+    // ourselves so a visitor cannot choose another visitor's rate-limit bucket.
+    const hubFetch = (input: Request) => {
+      const headers = new Headers(input.headers);
+      headers.set("x-meshmind-client-ip", request.headers.get("cf-connecting-ip") ?? "unknown");
+      return env.SAAS_HUB.getByName("meshmind-v3").fetch(new Request(input, { headers }));
+    };
+    // Enforce Google-only account access at the edge. A gateway WebSocket may keep an
+    // older Durable Object isolate alive after deployment, so its old password routes
+    // must never remain reachable through either API prefix.
+    if (["/api/register", "/api/login", "/api/v1/register", "/api/v1/login"].includes(url.pathname)) {
+      return Response.json({error:"邮箱密码登录已停用，请使用 Google 账号"},{status:410,headers:{
+        "cache-control":"no-store", "x-content-type-options":"nosniff", "strict-transport-security":"max-age=31536000",
+      }});
+    }
     // Public contract and version routing live at the edge. Long-lived gateway WebSockets
     // can keep an older Durable Object isolate alive during rollout; the existing /api
     // endpoints remain the authority for authentication, authorization and audit.
@@ -79,7 +94,7 @@ export default {
       const state = /^\/api\/devices\/(dev_[a-f0-9]{24})\/state$/.exec(legacyPath);
       if (state && request.method === "GET") {
         const catalogUrl = new URL("/api/devices", url.origin);
-        const catalogResponse = await env.SAAS_HUB.getByName("meshmind-v3").fetch(new Request(catalogUrl, request));
+        const catalogResponse = await hubFetch(new Request(catalogUrl, request));
         if (!catalogResponse.ok) return catalogResponse;
         const catalog = await catalogResponse.json() as { devices?: Array<{ id: string; connector: string }> };
         const device = catalog.devices?.find(item => item.id === state[1]);
@@ -87,7 +102,7 @@ export default {
         const route = device.connector === "adb" ? "adb-status"
           : ["esp32_serial", "home_assistant"].includes(device.connector) ? "device-status" : "status";
         const stateUrl = new URL(`/api/devices/${state[1]}/${route}`, url.origin);
-        const result = await env.SAAS_HUB.getByName("meshmind-v3").fetch(new Request(stateUrl, request));
+        const result = await hubFetch(new Request(stateUrl, request));
         if (!result.ok) return result;
         return Response.json({ connector: device.connector, ...await result.json() as object }, {
           headers: { "cache-control": "no-store", "x-content-type-options": "nosniff", "strict-transport-security": "max-age=31536000" },
@@ -95,7 +110,7 @@ export default {
       }
       const legacyUrl = new URL(request.url);
       legacyUrl.pathname = legacyPath;
-      return env.SAAS_HUB.getByName("meshmind-v3").fetch(new Request(legacyUrl, request));
+      return hubFetch(new Request(legacyUrl, request));
     }
     const releases = ["MeshMind-Connect-macOS-arm64-0.1.0.zip", "MeshMind-Connect-macOS-arm64-0.1.1.zip"];
     if ((request.method === "GET" || request.method === "HEAD") &&
@@ -137,6 +152,6 @@ export default {
       response.headers.set("content-security-policy","default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
       return response;
     }
-    return env.SAAS_HUB.getByName("meshmind-v3").fetch(request);
+    return hubFetch(request);
   },
 } satisfies ExportedHandler<Env>;

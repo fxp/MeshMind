@@ -8,6 +8,7 @@ import { createServer } from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createApp } from "../src/server.ts";
+import { seedOwner } from "./support/owner.ts";
 import { startGateway, localConfig } from "../src/gateway.ts";
 
 const unpack = (result: any) => JSON.parse(result.content[0].text);
@@ -55,8 +56,8 @@ else process.exit(3);
     return client;
   };
   try {
-    const owner = (await api("/api/register", { email: "adb-owner@example.test", password: "adb-test-password-long" })).cookie!;
-    const other = (await api("/api/register", { email: "adb-other@example.test", password: "adb-test-password-long" })).cookie!;
+    const owner = seedOwner(server.store, "adb-owner@example.test");
+    const other = seedOwner(server.store, "adb-other@example.test");
     const enrollment = (await api("/api/gateways", { name: "Local ADB" }, owner)).value;
     gateway = await startGateway({ stateFile: join(dir, "gateway.json"), enrollment: { ...enrollment.enrollment, hub: base },
       config: localConfig.parse({ devices: [{ localId: "android", name: "USB Pixel", model: "Android", connector: "adb", adbSerial: "USB-ONLY-123", adbPath: executable, allowUiDump: true, allowControl: true }] }),

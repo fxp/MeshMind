@@ -2,7 +2,7 @@ const $ = (selector) => document.querySelector(selector);
 const labels = { devices: '设备总览', gateways: '连接网关', access: '用户与 Agent', approvals: '操作记录', audit: '访问记录' };
 const actions = { status: '查看状态', pause: '暂停', resume: '恢复', stop: '停止', adb_input: 'ADB 输入', adb_ui: '读取界面' };
 const states = { pending: '等待审批', expired: '已到期', revoked: '已撤销', rejected: '已拒绝', executing: '正在发送', completed: '执行完成', delivered: '已发送 · 设备执行未确认', unknown: '结果未知 · 请检查设备' };
-let token, actor, devices = [], gateways = [], principals = [], approvals = [], current = 'devices', register = false, noticeTimer, googleEnabled = false;
+let token, actor, devices = [], gateways = [], principals = [], approvals = [], current = 'devices', noticeTimer, googleEnabled = false;
 function element(tag, text, className) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e; }
 function note(message, error = false) { const e = $('#notice'); e.textContent = message; e.className = error ? 'error' : ''; e.hidden = false; clearTimeout(noticeTimer); noticeTimer = setTimeout(() => e.hidden = true, 6500); }
 async function api(path, body, method) {
@@ -23,9 +23,7 @@ async function init() {
   try { actor = await api('/api/session'); if (!actor.authenticated) throw new Error('未登录'); }
   catch { $('#workspace').hidden = true; $('#auth').hidden = false; actor = undefined; return; }
   $('#auth').hidden = true; $('#workspace').hidden = false; $('#account-name').textContent = actor.name;
-  $('#google-link').hidden = !actor.owner || !googleEnabled;
-  $('#google-link').textContent = actor.googleLinked ? '已关联 Google' : '关联 Google 登录';
-  $('#google-link').disabled = !!actor.googleLinked;
+  $('#google-link').hidden = !actor.owner || !googleEnabled || !!actor.googleLinked;
   document.querySelectorAll('.owner-only').forEach(e => e.hidden = !actor.owner); showView(current);
   try { await refresh(); } catch (e) { note(e.message, true); }
 }
@@ -129,8 +127,6 @@ function reveal(title, description, content, filename) {
   $('#download-secret').onclick = () => { const url = URL.createObjectURL(new Blob([content], { type: 'text/plain' })); const link = element('a'); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }; $('#secret-dialog').showModal();
 }
 $('#secret-dialog').addEventListener('close', () => { $('#secret-value').textContent = ''; $('#download-secret').onclick = null; });
-$('#switch-auth').addEventListener('click', () => { register = !register; $('#auth-title').textContent = register ? '创建你的设备空间' : '欢迎回来'; $('#account-submit').textContent = register ? '创建账号 ↗' : '登录设备空间 ↗'; $('#switch-auth').textContent = register ? '已有账号？返回登录' : '第一次使用？创建账号'; $('#password').autocomplete = register ? 'new-password' : 'current-password'; });
-$('#account-form').addEventListener('submit', e => { e.preventDefault(); busy($('#account-submit'), async () => { await api(register ? '/api/register' : '/api/login', Object.fromEntries(new FormData(e.target))); e.target.reset(); await init(); }); });
 $('#token-login').addEventListener('submit', e => { e.preventDefault(); busy(e.target.querySelector('button'), async () => { token = new FormData(e.target).get('token').trim(); try { await api('/api/session'); } catch (err) { token = undefined; throw err; } e.target.reset(); await init(); }); });
 $('#logout').addEventListener('click', () => busy($('#logout'), async () => { if (actor.owner) await api('/api/logout', {}); token = undefined; actor = undefined; devices = []; gateways = []; principals = []; approvals = []; $('#workspace').hidden = true; $('#auth').hidden = false; }));
 document.querySelectorAll('.nav').forEach(b => b.addEventListener('click', () => { showView(b.dataset.view); if (current === 'audit') renderAudit().catch(e => note(e.message, true)); if (current === 'approvals') refresh().catch(e => note(e.message, true)); }));
@@ -164,13 +160,13 @@ async function boot() {
   try {
     googleEnabled = (await api('/api/auth/providers')).google;
     $('#google-login').disabled = !googleEnabled;
-    $('#google-hint').textContent = googleEnabled ? '仅用于登录，不申请访问你的 Google 文件。' : '管理员尚未启用 Google 登录，当前可使用邮箱和密码。';
+    $('#google-hint').textContent = googleEnabled ? '注册与登录仅使用 Google，不申请访问你的 Google 文件。' : '管理员尚未启用 Google 登录，请稍后再试。';
   } catch { $('#google-hint').textContent = '暂时无法获取 Google 登录配置，请稍后刷新。'; }
   const params = new URLSearchParams(location.search), error = params.get('auth_error');
   const messages = {
     google_invalid_state: '登录验证已到期或与当前浏览器不匹配，请重新点击 Google 登录。',
     google_cancelled: 'Google 登录已取消。', google_email_unverified: '请先在 Google 账号中验证邮箱。',
-    google_account_exists: '此邮箱已有账号。请先用密码登录，再选择「关联 Google 登录」。',
+    google_account_exists: '此邮箱已有旧账号，请联系管理员迁移并关联 Google。',
     google_signup_closed: '当前未开放新账号注册，请联系管理员。',
     google_link_expired: '原登录会话已到期，请重新登录后再关联 Google。',
     google_link_conflict: '此 Google 账号已关联其他设备空间，或当前账号已关联另一个 Google 账号。',

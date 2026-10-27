@@ -1,28 +1,13 @@
-import { randomBytes, createHash, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
+import { randomBytes, createHash } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { HttpError } from "./schema.ts";
 import { Store, type PrincipalRow } from "./store.ts";
 
-const scrypt = promisify(scryptCallback);
 export const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 export const secret = (prefix: string) => prefix + randomBytes(32).toString("base64url");
 export const id = (prefix: string) => prefix + randomBytes(12).toString("hex");
 export const parseBearer = (value?: string) => /^Bearer ([A-Za-z0-9_-]{20,160})$/i.exec(value ?? "")?.[1];
 export const bearer = (req: IncomingMessage) => parseBearer(req.headers.authorization);
-
-export async function passwordHash(password: string) {
-  const salt = randomBytes(16).toString("hex");
-  return salt + ":" + (await scrypt(password, salt, 64) as Buffer).toString("hex");
-}
-export async function passwordMatches(password: string, encoded: string) {
-  // OAuth-only accounts have no usable password. Still perform the same scrypt work.
-  const usable = /^[a-f0-9]{32}:[a-f0-9]{128}$/.test(encoded);
-  const [salt, expected] = (usable ? encoded : "0".repeat(32) + ":" + "00".repeat(64)).split(":");
-  const got = await scrypt(password, salt, 64) as Buffer;
-  const wanted = Buffer.from(expected, "hex");
-  return usable && got.length === wanted.length && timingSafeEqual(got, wanted);
-}
 
 export function sessionCookie(req: IncomingMessage) {
   return /(?:^|;\s*)meshmind_session=([A-Za-z0-9_-]+)/.exec(req.headers.cookie ?? "")?.[1];

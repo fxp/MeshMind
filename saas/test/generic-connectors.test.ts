@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { createApp } from "../src/server.ts";
+import { seedOwner } from "./support/owner.ts";
 import { startGateway, localConfig } from "../src/gateway.ts";
 
 test("Home Assistant entity is readable through a scoped MCP credential without exposing its local token", async () => {
@@ -36,7 +37,7 @@ test("Home Assistant entity is readable through a scoped MCP credential without 
   let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
   const client = new Client({ name: "ha-reader-test", version: "1.0.0" });
   try {
-    const owner = (await api("/api/register", { email: "ha@example.test", password: "long-test-password" })).cookie!;
+    const owner = seedOwner(app.store, "ha@example.test");
     const enrollment = (await api("/api/gateways", { name: "Home Assistant" }, owner)).value;
     gateway = await startGateway({ stateFile: join(dir, "gateway.json"), enrollment: { ...enrollment.enrollment, hub: base },
       config: localConfig.parse({ devices: [{ localId: "temperature", name: "Living room", model: "HA sensor",

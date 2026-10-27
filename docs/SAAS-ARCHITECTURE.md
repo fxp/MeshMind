@@ -40,13 +40,13 @@ flowchart LR
 - bearer 绑定设备 ID 列表、操作列表、到期时间；没有全设备通配符。
 - 共享用户不是当前空间的管理员，不能添加网关、签发凭证、读取审计或批准动作。
 - bearer 错误时不回退到浏览器所有者 Cookie。
-- 账号使用 scrypt，Cookie 使用 HttpOnly、SameSite=Strict、HTTPS 时 Secure；所有 Cookie 写操作校验 Origin。
+- 所有者账号仅使用 Google OIDC，Cookie 使用 HttpOnly、SameSite=Strict、HTTPS 时 Secure；普通写操作校验 Origin，Google 回调由一次性 state 和浏览器绑定校验。
 
-已增加 Google OIDC 授权码登录。Google 身份以稳定的 `sub` 关联账号，独立的 `account_identities` 表保证同一 Google 身份不能跨设备空间关联。新用户遵循开放注册开关；已有密码账号通过已登录所有者主动关联，邮箱相同不自动合并。仅申请 `openid email`，不持久化 Google access／refresh token。
+所有者注册和登录仅使用 Google OIDC 授权码流程；旧邮箱密码接口在 Hub 和 Cloudflare 边缘均返回 HTTP 410。Google 身份以稳定的 `sub` 关联账号，独立的 `account_identities` 表保证同一 Google 身份不能跨设备空间关联。新用户遵循开放注册开关；仍有有效会话的旧密码账号可由所有者主动关联，邮箱相同不自动合并。仅申请 `openid email`，不持久化 Google access／refresh token。受邀用户共享凭证及 Agent Bearer 凭证继续按设备和能力授权。
 
 登录使用服务端授权码、PKCE S256、nonce 和一次性 state。OAuth 临时浏览器 Cookie 使用 Lax，以接收跨站顶层回调；主会话仍使用 Strict。临时 verifier 保存在私有 SQLite 中，流程完成时删除，到期流程在后续登录开始时清理。关联回调重新确认发起者的所有者会话仍有效，退出登录会阻止尚未完成的关联。
 
-生产身份体系仍需本地邮箱验证、找回、站点自身的 MFA 与组织成员邀请；不将 Google 登录接入描述为完整的商业身份平台。
+生产身份体系仍需旧账号人工迁移、组织成员邀请、反滥用及完整运营监控；不将 Google 登录接入描述为完整的商业身份平台。
 
 ## Agent 的直接 MCP 入口
 
@@ -56,7 +56,7 @@ Hub 的 `/mcp` 提供官方 SDK Streamable HTTP，采用无状态 JSON POST；�
 
 工具只允许列举已授权设备、读取状态或 Android 界面结构、申请控制及查询自身审批。Agent 无批准、签发权限或获取网关密钥的工具。公网部署仍依赖正确配置的 HTTPS 和真实网络可达性，本机入口不能让其他网络的 Agent 自动访问。
 
-ADB 连接器将设备序列号固定在网关本地配置，并强制使用本机 ADB 服务；Hub 不接收设备序列号或任意 shell 命令。`adb_status` 只读设备信息。`adb_ui` 需本地开启 `allowUiDump`，且单独授权，返回的界面 XML 可能包含个人信息。`request_adb_input` 只接受有界的点击、滑动、常用按键和安全字符输入；本地 `allowControl`、主体范围和所有者逐次审批三关均须通过。审批参数保存在 Hub 中供所有者核对，不应输入密码。当前没有截图、APK 安装、文件传输或通用 ADB shell 工具。
+ADB 连接器将设备序列号固定在网关本地配置，并强制使用本机 ADB 服务；Hub 不接收设备序列号或任意 shell 命令。`adb_status` 只读设备信息。`adb_ui` 需本地开启 `allowUiDump`，且单独授权，返回的界面 XML 可能包含个人信息。`request_adb_input` 只接受有界的点击、滑动、常用按键和安全字符输入；本地 `allowControl` 与主体 `adb_input` 授权均须通过，授予后操作会立即执行，无逐次审批。输入和执行结果保存在 Hub 中供所有者核对，不应输入密码。当前没有截图、APK 安装、文件传输或通用 ADB shell 工具。
 
 ## 网关入网与会话
 

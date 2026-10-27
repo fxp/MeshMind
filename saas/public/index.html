@@ -19,9 +19,8 @@
     <div class="auth-form-wrap">
       <span class="eyebrow">开始建立你的设备空间</span><h2 id="auth-title">欢迎回来</h2><p class="muted">从一台 X1C 开始，也可以先体验模拟设备。</p>
       <button id="google-login" class="google-button" type="button" disabled><span class="google-mark" aria-hidden="true">G</span>使用 Google 账号登录</button>
-      <p id="google-hint" class="fine google-hint">正在检查登录方式…</p><div class="auth-divider">或使用邮箱和密码</div>
-      <form id="account-form"><label>邮箱<input name="email" type="email" autocomplete="username" required maxlength="200" placeholder="you@example.com"></label><label>密码<input id="password" name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required placeholder="至少 12 个字符"></label><button id="account-submit" class="primary" type="submit">登录设备空间 ↗</button></form>
-      <button id="switch-auth" class="text-button" type="button">第一次使用？创建账号</button><div class="auth-divider">受邀用户 / Agent</div>
+      <p id="google-hint" class="fine google-hint">正在检查登录方式…</p>
+      <div class="auth-divider">受邀用户 / Agent</div>
       <form id="token-login"><label>使用共享访问凭证<input name="token" type="password" required autocomplete="off" placeholder="设备所有者提供的访问凭证"></label><button class="secondary" type="submit">进入获授权的设备</button></form><p class="fine">共享凭证仅保存在当前页面内存中。刷新后需重新输入。</p><p class="fine auth-api-link">Agent 接入：<a href="/docs/agent-api">CLI / API 文档 ↗</a> · <a href="/api/v1/openapi.json">OpenAPI 规范 ↗</a></p>
       <div class="download-invite"><strong>让 Mac 连接你的设备</strong><p>安装 MeshMind Connect，将本机 ADB、ESP32 USB 串口或 Home Assistant 接入设备空间。</p><a class="secondary compact" href="/downloads/MeshMind-Connect-macOS-arm64-0.1.1.zip">下载 macOS 程序 ↗</a><small>Apple Silicon · macOS 14+ · 开发预览版</small></div>
     </div>

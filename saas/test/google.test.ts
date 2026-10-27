@@ -5,6 +5,7 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { OAuth2Client } from "google-auth-library";
 import { createApp } from "../src/server.ts";
 import { GoogleIdentityProvider } from "../src/google.ts";
+import { seedOwner } from "./support/owner.ts";
 
 const config = { clientId: "test-client.apps.googleusercontent.com", clientSecret: "synthetic-test-client-secret" };
 const keys = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -17,7 +18,7 @@ function signedJwt(claims: Claims, wrongKey = false) {
   return input + "." + sign("RSA-SHA256", Buffer.from(input), (wrongKey ? malicious : keys).privateKey).toString("base64url");
 }
 
-async function fixture(allowSignup = true, googleEnabled = true, secure = false) {
+async function fixture(allowSignup = true, googleEnabled = true, secure = false, trustedClientIpHeader = false) {
   const codes = new Map<string, { claims: Claims; verifier: string; badSignature: boolean }>();
   const client = new OAuth2Client({ clientId: config.clientId, clientSecret: config.clientSecret, redirectUri: "http://localhost/api/auth/google/callback" });
   let exchanges = 0;
@@ -31,14 +32,15 @@ async function fixture(allowSignup = true, googleEnabled = true, secure = false)
   } });
   Object.defineProperty(client, "getFederatedSignonCertsAsync", { value: async () => ({ certs: { "test-key": keys.publicKey.export({ type: "spki", format: "pem" }) }, format: "PEM" }) });
   const origin = secure ? "https://mesh.example.test" : "http://localhost";
-  const app = createApp({ database: ":memory:", publicUrl: origin, allowSignup,
+  const app = createApp({ database: ":memory:", publicUrl: origin, allowSignup, trustedClientIpHeader,
     google: googleEnabled ? config : undefined, googleProvider: new GoogleIdentityProvider(config, origin + "/api/auth/google/callback", client) });
   app.server.listen(0, "127.0.0.1"); await once(app.server, "listening");
   const base = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
-  const call = async (path: string, options: { cookie?: string; body?: unknown; method?: string; origin?: string; authorization?: string } = {}) => {
+  const call = async (path: string, options: { cookie?: string; body?: unknown; method?: string; origin?: string; authorization?: string; clientIp?: string } = {}) => {
     const headers: Record<string, string> = { origin: options.origin ?? origin, "content-type": "application/json" };
     if (options.cookie) headers.cookie = options.cookie;
     if (options.authorization) headers.authorization = options.authorization;
+    if (options.clientIp) headers["x-meshmind-client-ip"] = options.clientIp;
     return fetch(base + path, { method: options.method ?? (options.body === undefined ? "GET" : "POST"), headers, redirect: "manual", body: options.body === undefined ? undefined : JSON.stringify(options.body) });
   };
   const cookie = (res: Response, name: string) => res.headers.getSetCookie().find(c => c.startsWith(name + "="))?.split(";")[0];
@@ -89,7 +91,7 @@ test("Google OIDC authorization, account identity and replay protection", async 
       assert.equal(session.owner, true); assert.equal(session.googleLinked, true);
       const row = f.app.store.db.prepare("SELECT * FROM accounts WHERE email=?").get("google-user@example.test") as { id: string; password: string };
       accountId = row.id; assert.equal(row.password, "!google-only");
-      assert.equal((await f.call("/api/login", { body: { email: "google-user@example.test", password: "some-made-up-password" } })).status, 401);
+      assert.equal((await f.call("/api/login", { body: { email: "google-user@example.test", password: "some-made-up-password" } })).status, 410);
       const replay = await f.call(callback, { cookie: flow.cookie });
       assert.equal(replay.headers.get("location"), "/?auth_error=google_invalid_state");
       assert.equal(f.cookie(replay, "meshmind_session"), undefined);
@@ -147,8 +149,7 @@ test("Google OIDC authorization, account identity and replay protection", async 
 test("existing local accounts require explicit Google linking", async t => {
   const f = await fixture();
   try {
-    const registered = await f.call("/api/register", { body: { email: "local@example.test", password: "long-local-password-2026" } });
-    const ownerCookie = f.cookie(registered, "meshmind_session")!;
+    const ownerCookie = seedOwner(f.app.store, "local@example.test");
     const localAccount = f.app.store.db.prepare("SELECT id FROM accounts WHERE email='local@example.test'").get() as { id: string };
     await t.test("matching email never automatically merges an unverified local account", async () => {
       const flow = await f.begin();
@@ -180,8 +181,8 @@ test("existing local accounts require explicit Google linking", async t => {
       assert.equal(response.headers.get("location"), "/?auth_error=google_link_conflict");
     });
     await t.test("a Google identity cannot be linked into a second tenant", async () => {
-      const second = await f.call("/api/register", { body: { email: "another-owner@example.test", password: "another-local-password-2026" } });
-      const flow = await f.begin(f.cookie(second, "meshmind_session"));
+      const second = seedOwner(f.app.store, "another-owner@example.test");
+      const flow = await f.begin(second);
       const response = await f.call(f.issue(flow), { cookie: flow.cookie });
       assert.equal(response.headers.get("location"), "/?auth_error=google_link_conflict");
       assert.equal((f.app.store.db.prepare("SELECT account_id FROM account_identities WHERE subject='google-user-1'").get() as { account_id: string }).account_id, localAccount.id);
@@ -213,4 +214,18 @@ test("Google login respects deployment settings and secure cookie flags", async 
     assert.equal(login.headers.get("location"), "/");
     assert.match(login.headers.getSetCookie().find(c => c.startsWith("meshmind_session="))!, /; Secure/);
   } finally { await closed.app.close(); }
+});
+
+test("Google start rate limits use a trusted edge address, never a visitor-supplied header on local Hub", async () => {
+  const local = await fixture();
+  try {
+    for (let n = 0; n < 20; n++) assert.equal((await local.call("/api/auth/google", { clientIp: `192.0.2.${n + 1}` })).status, 303);
+    assert.equal((await local.call("/api/auth/google", { clientIp: "192.0.2.250" })).status, 429);
+  } finally { await local.app.close(); }
+  const edge = await fixture(true, true, false, true);
+  try {
+    for (let n = 0; n < 20; n++) assert.equal((await edge.call("/api/auth/google", { clientIp: "192.0.2.1" })).status, 303);
+    assert.equal((await edge.call("/api/auth/google", { clientIp: "192.0.2.1" })).status, 429);
+    assert.equal((await edge.call("/api/auth/google", { clientIp: "192.0.2.2" })).status, 303);
+  } finally { await edge.app.close(); }
 });
