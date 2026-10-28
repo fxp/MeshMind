@@ -18,6 +18,8 @@ test("public Agent assets are immutable, checksummed, and referenced by exact di
   assert.equal(cliSum, `${cliDigest}  meshmind-cli-0.1.0.mjs\n`);
   assert.match(homepage, new RegExp(skillDigest, "g"));
   assert.match(homepage, new RegExp(cliDigest));
+  assert.match(homepage, /href="https:\/\/github\.com\/fxp\/MeshMind"/);
+  assert.match(homepage, /OPEN SOURCE DEVICE CLOUD/);
   assert.doesNotMatch(homepage, /downloads\/MeshMind-Connect-macOS-arm64-0\.1\.2\.zip/);
 });
 

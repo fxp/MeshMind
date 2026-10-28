@@ -1,5 +1,9 @@
 # MeshMind
 
+[官网](https://mesh.xiaopingfeng.com/) · [GitHub 源代码](https://github.com/fxp/MeshMind) · [MIT License](./LICENSE)
+
+MeshMind 是一个开源的设备接入平台。源代码可以自由使用、修改和分发；部署者需要自行保护 OAuth 密钥、设备凭据和网关身份。
+
 **当前方向：v3 设备接入 SaaS。** 线上入口：[mesh.xiaopingfeng.com](https://mesh.xiaopingfeng.com/)。让不同网络中的设备通过本地网关接入，由所有者把指定设备的能力授权给用户和 Agent。展示场景包括 **内网拓竹 X1 Carbon → Codex MCP**、**本机 ADB → Codex MCP**，以及通过 MeshMind Connect for Mac 接入任意 USB 串口和局域网 HTTP 设备。
 
 Agent 可通过 MCP、[独立 JSON CLI 与版本化 HTTP API](https://mesh.xiaopingfeng.com/docs/agent-api) 访问获授权的设备。
