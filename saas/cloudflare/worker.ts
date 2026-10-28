@@ -139,7 +139,7 @@ export default {
       }
       return new Response(request.method === "HEAD" ? null : object.body, {status,headers});
     }
-    if ((request.method === "GET" || request.method === "HEAD") && ["/","/docs/agent-api","/app.js","/app.css","/meshmind-cli.mjs","/favicon.ico"].includes(url.pathname)) {
+    if ((request.method === "GET" || request.method === "HEAD") && ["/","/docs/agent-api","/app.js","/app.css","/skill.css","/meshmind-cli.mjs","/skills/meshmind/SKILL.md","/favicon.ico"].includes(url.pathname)) {
       if (url.pathname === "/favicon.ico") return new Response(null,{status:204});
       // Static Assets canonicalizes *.html to extensionless URLs.
       const assetUrl = url.pathname === "/docs/agent-api" ? new URL("/agent-api", url.origin) : url;

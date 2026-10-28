@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">
-  <title>MeshMind · 设备有边界，连接无距离</title><link rel="stylesheet" href="/app.css"><script src="/app.js" type="module"></script>
+  <title>MeshMind · 设备有边界，连接无距离</title><link rel="stylesheet" href="/app.css"><link rel="stylesheet" href="/skill.css"><script src="/app.js" type="module"></script>
 </head>
 <body>
   <a class="skip" href="#main">跳到主要内容</a><div id="notice" role="status" aria-live="polite" hidden></div>
@@ -21,8 +21,9 @@
       <button id="google-login" class="google-button" type="button" disabled><span class="google-mark" aria-hidden="true">G</span>使用 Google 账号登录</button>
       <p id="google-hint" class="fine google-hint">正在检查登录方式…</p>
       <div class="auth-divider">受邀用户 / Agent</div>
-      <form id="token-login"><label>使用共享访问凭证<input name="token" type="password" required autocomplete="off" placeholder="设备所有者提供的访问凭证"></label><button class="secondary" type="submit">进入获授权的设备</button></form><p class="fine">共享凭证仅保存在当前页面内存中。刷新后需重新输入。</p><p class="fine auth-api-link">Agent 接入：<a href="/docs/agent-api">CLI / API 文档 ↗</a> · <a href="/api/v1/openapi.json">OpenAPI 规范 ↗</a></p>
+      <form id="token-login"><label>使用共享访问凭证<input name="token" type="password" required autocomplete="off" placeholder="设备所有者提供的访问凭证"></label><button class="secondary" type="submit">进入获授权的设备</button></form><p class="fine">共享凭证仅保存在当前页面内存中。刷新后需重新输入。</p><p class="fine auth-api-link">Agent 接入：<a href="/docs/agent-api">CLI / API 文档 ↗</a> · <a href="/skills/meshmind/SKILL.md" download="SKILL.md">MeshMind Skill ↓</a> · <a href="/api/v1/openapi.json">OpenAPI 规范 ↗</a></p>
       <div class="download-invite"><strong>让 Mac 连接你的设备</strong><p>安装 MeshMind Connect，将本机 ADB、任意 USB 串口或局域网设备接入设备空间。</p><a class="secondary compact" href="/downloads/MeshMind-Connect-macOS-arm64-0.1.2.zip">下载 macOS 程序 ↗</a><small>Apple Silicon · macOS 14+ · 开发预览版</small></div>
+      <div class="skill-invite"><span class="eyebrow">AGENT SKILL</span><strong>让 Agent 学会安全使用 MeshMind</strong><p>包含设备发现、MCP / CLI 调用、审批与防重复执行规则。</p><a class="secondary compact" href="/skills/meshmind/SKILL.md" download="SKILL.md">下载 MeshMind Skill ↓</a><code>mkdir -p ~/.codex/skills/meshmind<br>curl -fsSL https://mesh.xiaopingfeng.com/skills/meshmind/SKILL.md -o ~/.codex/skills/meshmind/SKILL.md</code></div>
     </div>
   </section>
   <div id="workspace" class="workspace" hidden>
@@ -35,13 +36,14 @@
         <button class="nav" data-view="approvals" type="button"><span>⊙</span> 操作记录 <span id="approval-count" class="count">0</span></button>
         <button class="nav owner-only" data-view="audit" type="button"><span>≡</span> 访问记录</button>
       </nav>
-      <div class="sidebar-note"><span class="eyebrow">连接原则</span><p>凭证留在本地。<br>能力按需开放。<br>操作全程留痕。</p><a href="/docs/agent-api">CLI / API 文档 ↗</a></div><div class="account"><span id="account-name"></span><button id="google-link" type="button" class="text-button" hidden>关联 Google 登录</button><button id="logout" type="button" class="text-button">退出 ↗</button></div>
+      <div class="sidebar-note"><span class="eyebrow">连接原则</span><p>凭证留在本地。<br>能力按需开放。<br>操作全程留痕。</p><a href="/docs/agent-api">CLI / API 文档 ↗</a><a href="/skills/meshmind/SKILL.md" download="SKILL.md">下载 Agent Skill ↓</a></div><div class="account"><span id="account-name"></span><button id="google-link" type="button" class="text-button" hidden>关联 Google 登录</button><button id="logout" type="button" class="text-button">退出 ↗</button></div>
     </aside>
     <main id="main" class="main" tabindex="-1">
       <header class="topbar"><span>WORKSPACE / <span id="view-label">设备总览</span></span><span class="environment">EARLY ACCESS · 设备云</span></header>
       <section id="view-devices" class="view">
         <div class="page-heading"><div><span class="eyebrow">CONNECTED, WITH PERMISSION</span><h1>设备在远方，<br>能力在手边。</h1><p>查看获授权的设备，了解此刻的工作状态。</p></div><button id="refresh" class="secondary" type="button">↻ 刷新设备</button></div>
         <div class="onboarding owner-only"><div><span class="step-number">01</span><strong>安装 Mac 接入程序</strong><small>在设备所在网络运行网关</small></div><div><span class="step-number">02</span><strong>添加本机设备</strong><small>ADB、USB、局域网设备等</small></div><div><span class="step-number">03</span><strong>授权给 Codex</strong><small>选择设备、权限与有效期</small></div></div>
+        <div class="agent-skill-card"><div><span class="eyebrow">INSTALLABLE AGENT SKILL</span><h2>把 MeshMind 使用规则交给 Agent</h2><p>安装后，Agent 会先发现获授权设备，选择正确的 MCP 工具，并遵守审批、幂等与未知结果不重试的边界。</p></div><div class="skill-actions"><a class="primary" href="/skills/meshmind/SKILL.md" download="SKILL.md">下载 SKILL.md ↓</a><code>mkdir -p ~/.codex/skills/meshmind<br>curl -fsSL https://mesh.xiaopingfeng.com/skills/meshmind/SKILL.md -o ~/.codex/skills/meshmind/SKILL.md</code></div></div>
         <div class="section-label"><h2>设备目录</h2><span id="device-summary">正在加载</span></div><div id="devices" class="device-grid"></div><div class="boundary-note"><span>↗</span><p>网关通过出站连接接入。设备的局域网端口和访问码不会提供给其他用户或 Agent。</p></div>
       </section>
       <section id="view-gateways" class="view" hidden>

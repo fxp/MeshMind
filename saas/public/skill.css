@@ -1,0 +1,56 @@
+.skill-invite {
+  margin-top: 14px;
+  padding: 18px 20px;
+  border: 1px solid #cfdcc5;
+  border-radius: 11px;
+  background: #f8faf4;
+}
+.skill-invite .eyebrow { margin-bottom: 7px; color: #66805c; }
+.skill-invite strong { display: block; font-size: 14px; }
+.skill-invite p { margin: 6px 0 12px; color: #647663; font-size: 11px; }
+.skill-invite code {
+  display: block;
+  margin-top: 10px;
+  color: #7a8975;
+  font: 9px "SFMono-Regular", Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+.sidebar-note a { display: block; margin-top: 11px; }
+.agent-skill-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  margin: -14px 0 38px;
+  padding: 24px 27px;
+  border: 1px solid #d4e0c9;
+  border-radius: 12px;
+  background: linear-gradient(120deg, #eef5e5, #f9faf5);
+}
+.agent-skill-card .eyebrow { margin-bottom: 8px; color: #66805c; }
+.agent-skill-card h2 { font-size: 20px; }
+.agent-skill-card p { max-width: 590px; margin-top: 9px; color: #687966; font-size: 12px; }
+.skill-actions {
+  min-width: 390px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+.skill-actions code {
+  padding: 10px 12px;
+  border: 1px solid #dce5d4;
+  border-radius: 6px;
+  background: #fff;
+  color: #536652;
+  font: 9px/1.6 "SFMono-Regular", Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .agent-skill-card { align-items: flex-start; flex-direction: column; }
+  .skill-actions { min-width: 0; width: 100%; }
+}
+@media (max-width: 480px) {
+  .agent-skill-card { padding: 20px; }
+  .skill-actions code { font-size: 8px; }
+}

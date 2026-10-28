@@ -33,7 +33,7 @@ const principalInput = z.object({
   permissions: z.array(permission).min(1).max(7).refine(p => p.includes("status"), "必须包含 status"),
   expiresInHours: z.number().int().min(1).max(24 * 30).default(24),
 }).strict();
-const staticFiles = new Map([["/", ["index.html", "text/html; charset=utf-8"]], ["/docs/agent-api", ["agent-api.html", "text/html; charset=utf-8"]], ["/app.js", ["app.js", "text/javascript; charset=utf-8"]], ["/app.css", ["app.css", "text/css; charset=utf-8"]], ["/meshmind-cli.mjs", ["meshmind-cli.mjs", "text/javascript; charset=utf-8"]]]);
+const staticFiles = new Map([["/", ["index.html", "text/html; charset=utf-8"]], ["/docs/agent-api", ["agent-api.html", "text/html; charset=utf-8"]], ["/app.js", ["app.js", "text/javascript; charset=utf-8"]], ["/app.css", ["app.css", "text/css; charset=utf-8"]], ["/skill.css", ["skill.css", "text/css; charset=utf-8"]], ["/meshmind-cli.mjs", ["meshmind-cli.mjs", "text/javascript; charset=utf-8"]], ["/skills/meshmind/SKILL.md", ["skills/meshmind/SKILL.md", "text/markdown; charset=utf-8"]]]);
 
 async function body(req: IncomingMessage): Promise<unknown> {
   const parts: Buffer[] = []; let length = 0;

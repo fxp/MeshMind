@@ -46,7 +46,13 @@ test("SaaS tenant, gateway, delegation, approval and MCP boundaries", async t =>
       assert.equal(guide.status, 200);
       assert.match(await guide.text(), /MeshMind CLI/);
       const landing = await fetch(base + "/");
-      assert.match(await landing.text(), /href="\/docs\/agent-api"/);
+      const landingHtml = await landing.text();
+      assert.match(landingHtml, /href="\/docs\/agent-api"/);
+      assert.match(landingHtml, /href="\/skills\/meshmind\/SKILL\.md"/);
+      const skill = await fetch(base + "/skills/meshmind/SKILL.md");
+      assert.equal(skill.status, 200);
+      assert.match(skill.headers.get("content-type") ?? "", /^text\/markdown/);
+      assert.match(await skill.text(), /name: meshmind[\s\S]*invoke_device_action/);
       const discovery = await call("/.well-known/meshmind.json");
       assert.equal(discovery.status, 200);
       assert.equal(discovery.body.apiVersion, "v1");
