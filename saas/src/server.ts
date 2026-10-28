@@ -10,7 +10,7 @@ import { WebSocketServer } from "ws";
 import { Store, manifest, type DeviceRow, type PrincipalRow, type ApprovalRow } from "./store.ts";
 import { Broker } from "./broker.ts";
 import { authenticate, canUse, requireOwner, hash, secret, id, bearer, parseBearer, RateLimiter, type Actor } from "./auth.ts";
-import { HttpError, validate, permission, controlAction, adbInput } from "./schema.ts";
+import { HttpError, validate, permission, controlAction, adbInput, deviceActionInput, deviceActionResult } from "./schema.ts";
 import { GoogleLogin, GoogleLoginError, type GoogleOptions, type GoogleProvider } from "./google.ts";
 import { apiContract, discovery } from "./api-contract.ts";
 
@@ -30,7 +30,7 @@ const nameInput = z.object({ name: z.string().trim().min(1).max(80) }).strict();
 const principalInput = z.object({
   name: z.string().trim().min(1).max(80), kind: z.enum(["user", "agent"]),
   devices: z.array(z.string().regex(/^dev_[a-f0-9]{24}$/)).min(1).max(32),
-  permissions: z.array(permission).min(1).max(6).refine(p => p.includes("status"), "必须包含 status"),
+  permissions: z.array(permission).min(1).max(7).refine(p => p.includes("status"), "必须包含 status"),
   expiresInHours: z.number().int().min(1).max(24 * 30).default(24),
 }).strict();
 const staticFiles = new Map([["/", ["index.html", "text/html; charset=utf-8"]], ["/docs/agent-api", ["agent-api.html", "text/html; charset=utf-8"]], ["/app.js", ["app.js", "text/javascript; charset=utf-8"]], ["/app.css", ["app.css", "text/css; charset=utf-8"]], ["/meshmind-cli.mjs", ["meshmind-cli.mjs", "text/javascript; charset=utf-8"]]]);
@@ -85,15 +85,17 @@ export function createApp(options: AppOptions) {
 
   function listDevices(actor: Actor) {
     const rows = store.db.prepare("SELECT d.* FROM devices d JOIN gateways g ON g.id=d.gateway_id WHERE d.tenant_id=? AND d.active=1 AND g.revoked=0").all(actor.tenant) as unknown as DeviceRow[];
-    return { devices: rows.filter(d => canUse(actor, d.id, "status")).map(d => ({
-      id: d.id, gatewayId: d.gateway_id, ...manifest(d), online: broker.online(d.gateway_id),
-      capabilities: manifest(d).capabilities.filter(p => canUse(actor, d.id, p)),
-    })) };
+    return { devices: rows.filter(d => canUse(actor, d.id, "status")).map(d => {
+      const descriptor = manifest(d);
+      const capabilities = descriptor.capabilities.filter(p => canUse(actor, d.id, p));
+      return { id: d.id, gatewayId: d.gateway_id, ...descriptor, online: broker.online(d.gateway_id), capabilities,
+        ...(capabilities.includes("device_invoke") && descriptor.actions ? { actions: descriptor.actions } : { actions: undefined }) };
+    }) };
   }
   async function readStatus(actor: Actor, deviceId: string) {
     const d = deviceFor(actor, deviceId, "status");
     if (manifest(d).connector === "adb") throw new HttpError(400, "ADB 设备请使用 adb_status");
-    if (["esp32_serial", "home_assistant"].includes(manifest(d).connector)) throw new HttpError(400, "此设备请使用 device_status");
+    if (["esp32_serial", "usb_serial", "home_assistant", "local_http"].includes(manifest(d).connector)) throw new HttpError(400, "此设备请使用 device_status");
     const status = await broker.status(actor.tenant, d.gateway_id, d.local_id);
     store.audit(actor.tenant, actor.id, "status", deviceId, "ok");
     return { deviceId, status, stale: Date.now() - status.observedAt > 60_000 };
@@ -107,7 +109,7 @@ export function createApp(options: AppOptions) {
   }
   async function readDeviceStatus(actor: Actor, deviceId: string) {
     const d = deviceFor(actor, deviceId, "status");
-    if (!["esp32_serial", "home_assistant"].includes(manifest(d).connector)) throw new HttpError(400, "此设备不是通用设备连接器");
+    if (!["esp32_serial", "usb_serial", "home_assistant", "local_http"].includes(manifest(d).connector)) throw new HttpError(400, "此设备不是通用设备连接器");
     const status = await broker.deviceStatus(actor.tenant, d.gateway_id, d.local_id);
     store.audit(actor.tenant, actor.id, "device.status", deviceId, "ok");
     return { deviceId, status, stale: Date.now() - status.observedAt > 60_000 };
@@ -116,7 +118,7 @@ export function createApp(options: AppOptions) {
     const d = deviceFor(actor, deviceId, "status");
     const connector = manifest(d).connector;
     const result = connector === "adb" ? await readAdbStatus(actor, deviceId)
-      : ["esp32_serial", "home_assistant"].includes(connector) ? await readDeviceStatus(actor, deviceId)
+      : ["esp32_serial", "usb_serial", "home_assistant", "local_http"].includes(connector) ? await readDeviceStatus(actor, deviceId)
       : await readStatus(actor, deviceId);
     return { connector, ...result };
   }
@@ -144,6 +146,32 @@ export function createApp(options: AppOptions) {
       .run(approval, actor.tenant, actor.id, deviceId, input.action, input.idempotencyKey, Math.min(actor.principal.expires_at, Date.now() + 5 * 60_000), Date.now());
     store.audit(actor.tenant, actor.id, input.action, deviceId, "approval_requested");
     return { value: { approval: approvalView(store.db.prepare("SELECT * FROM approvals WHERE id=?").get(approval) as unknown as ApprovalRow) }, status: 202 };
+  }
+  function requestDeviceAction(actor: Actor, deviceId: string, value: unknown) {
+    if (actor.owner) throw new HttpError(400, "请使用共享凭证提交设备操作，再由所有者审批");
+    const input = validate(deviceActionInput.extend({ idempotencyKey: z.string().min(8).max(100).regex(/^[A-Za-z0-9_-]+$/) }).strict(), value);
+    const d = deviceFor(actor, deviceId, "device_invoke");
+    const selected = manifest(d).actions?.find(action => action.name === input.action);
+    if (!selected) throw new HttpError(400, "此操作未在本地网关启用");
+    const payload = { action: input.action };
+    const serialized = JSON.stringify(payload);
+    const existing = store.db.prepare("SELECT * FROM approvals WHERE principal_id=? AND idempotency_key=?").get(actor.id, input.idempotencyKey) as ApprovalRow | undefined;
+    if (existing) {
+      const saved = store.db.prepare("SELECT payload FROM approval_payloads WHERE approval_id=?").get(existing.id) as { payload: string } | undefined;
+      if (existing.device_id !== deviceId || existing.action !== "device_invoke" || saved?.payload !== serialized) throw new HttpError(409, "同一幂等键不能用于不同操作");
+      return { value: { approval: approvalView(existing, payload) }, status: 200 };
+    }
+    const count = store.db.prepare("SELECT count(*) AS n FROM approvals WHERE principal_id=? AND state='pending' AND expires_at>?").get(actor.id, Date.now()) as { n: number };
+    if (count.n >= 20) throw new HttpError(429, "待审批操作过多，请先处理已有申请");
+    const approval = id("ap_");
+    store.transaction(() => {
+      store.db.prepare("INSERT INTO approvals(id,tenant_id,principal_id,device_id,action,idempotency_key,state,expires_at,created_at) VALUES(?,?,?,?,?,?,'pending',?,?)")
+        .run(approval, actor.tenant, actor.id, deviceId, "device_invoke", input.idempotencyKey, Math.min(actor.principal.expires_at, Date.now() + 5 * 60_000), Date.now());
+      store.db.prepare("INSERT INTO approval_payloads(approval_id,payload) VALUES(?,?)").run(approval, serialized);
+    });
+    store.audit(actor.tenant, actor.id, `device_invoke.${input.action}`, deviceId, "approval_requested");
+    const row = store.db.prepare("SELECT * FROM approvals WHERE id=?").get(approval) as unknown as ApprovalRow;
+    return { value: { approval: approvalView(row, payload) }, status: 202 };
   }
   async function requestAdbInput(actor: Actor, deviceId: string, value: unknown) {
     if (actor.owner) throw new HttpError(400, "请使用已授予 adb_input 权限的共享凭证执行操作");
@@ -214,13 +242,14 @@ export function createApp(options: AppOptions) {
         if (path === "/api/devices") value = listDevices(current);
         else if (path === "/api/approvals") value = listApprovals(current);
         else {
-          const match = /^\/api\/devices\/(dev_[a-f0-9]{24})\/(status|device-status|actions|adb-status|adb-actions|adb-ui)$/.exec(path);
+          const match = /^\/api\/devices\/(dev_[a-f0-9]{24})\/(status|device-status|device-actions|actions|adb-status|adb-actions|adb-ui)$/.exec(path);
           if (!match) throw new HttpError(404, "工具不存在");
           value = match[2] === "status" ? await readStatus(current, match[1])
             : match[2] === "device-status" ? await readDeviceStatus(current, match[1])
             : match[2] === "adb-status" ? await readAdbStatus(current, match[1])
             : match[2] === "adb-ui" ? await readAdbUi(current, match[1])
-            : match[2] === "adb-actions" ? (await requestAdbInput(current, match[1], input)).value : requestAction(current, match[1], input).value;
+            : match[2] === "adb-actions" ? (await requestAdbInput(current, match[1], input)).value
+            : match[2] === "device-actions" ? requestDeviceAction(current, match[1], input).value : requestAction(current, match[1], input).value;
         }
         return { content: [{ type: "text", text: JSON.stringify(value) }], isError: false };
       } catch (err) {
@@ -365,7 +394,7 @@ export function createApp(options: AppOptions) {
     if (path === "/api/devices" && method === "GET") {
       return json(res, listDevices(actor));
     }
-    const deviceMatch = /^\/api\/devices\/(dev_[a-f0-9]{24})\/(state|status|device-status|actions|adb-status|adb-actions|adb-ui)$/.exec(path);
+    const deviceMatch = /^\/api\/devices\/(dev_[a-f0-9]{24})\/(state|status|device-status|device-actions|actions|adb-status|adb-actions|adb-ui)$/.exec(path);
     if (deviceMatch) {
       const [, deviceId, route] = deviceMatch;
       if (route === "state" && method === "GET") return json(res, await readUnifiedStatus(actor, deviceId));
@@ -373,6 +402,10 @@ export function createApp(options: AppOptions) {
         return json(res, await readStatus(actor, deviceId));
       }
       if (route === "device-status" && method === "GET") return json(res, await readDeviceStatus(actor, deviceId));
+      if (route === "device-actions" && method === "POST") {
+        const result = requestDeviceAction(actor, deviceId, await body(req));
+        return json(res, result.value, result.status);
+      }
       if (route === "actions" && method === "POST") {
         const result = requestAction(actor, deviceId, await body(req));
         return json(res, result.value, result.status);
@@ -434,8 +467,11 @@ export function createApp(options: AppOptions) {
       store.db.prepare("UPDATE approvals SET state='executing' WHERE id=? AND state='pending'").run(row.id);
       store.audit(actor.tenant, actor.id, row.action, row.device_id, "approved");
       try {
-        const payload = row.action === "adb_input" ? adbInput.parse(payloadFor(row)) : undefined;
-        const result = validate(z.object({ delivery: z.enum(["published", "simulated", "executed"]), deviceAcknowledged: z.boolean() }).strict(), await broker.call(actor.tenant, d.gateway_id, d.local_id, row.action, payload));
+        const payload = row.action === "adb_input" ? adbInput.parse(payloadFor(row))
+          : row.action === "device_invoke" ? deviceActionInput.parse(payloadFor(row)) : undefined;
+        const rawResult = await broker.call(actor.tenant, d.gateway_id, d.local_id, row.action, payload);
+        const result = row.action === "device_invoke" ? validate(deviceActionResult, rawResult)
+          : validate(z.object({ delivery: z.enum(["published", "simulated", "executed"]), deviceAcknowledged: z.boolean() }).strict(), rawResult);
         const state = result.deviceAcknowledged ? "completed" : "delivered";
         store.db.prepare("UPDATE approvals SET state=?,result=? WHERE id=?").run(state, JSON.stringify(result), row.id);
         store.audit(actor.tenant, actor.id, row.action, row.device_id, state);

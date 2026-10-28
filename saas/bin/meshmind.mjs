@@ -14,6 +14,8 @@ Usage: meshmind [--hub URL] [--token-file PATH] <command>
   actions list                     List this credential's action records
   actions printer DEVICE_ID ACTION [--idempotency-key KEY]
                                    Request pause, resume or stop; owner approval required
+  actions device DEVICE_ID ACTION [--idempotency-key KEY]
+                                   Request a locally predeclared USB or LAN action
   actions adb DEVICE_ID --input-json JSON --execute [--idempotency-key KEY]
                                    Execute granted Android input immediately
   api METHOD /api/v1/PATH [--data JSON]
@@ -88,6 +90,11 @@ export async function runCli(argv = process.argv.slice(2), env = process.env, fe
     deviceId(id);
     if (!["pause", "resume", "stop"].includes(extra)) throw new CliError("Printer action must be pause, resume or stop");
     method = "POST"; path = `/api/v1/devices/${id}/actions`;
+    input = { action: extra, idempotencyKey: options.idempotencyKey ?? randomUUID() };
+  } else if (command === "actions" && subcommand === "device" && args.length === 4) {
+    deviceId(id);
+    if (!/^[a-z][a-z0-9_]{0,39}$/.test(extra ?? "")) throw new CliError("Device action must be a name returned by devices list");
+    method = "POST"; path = `/api/v1/devices/${id}/device-actions`;
     input = { action: extra, idempotencyKey: options.idempotencyKey ?? randomUUID() };
   } else if (command === "actions" && subcommand === "adb" && args.length === 3) {
     deviceId(id);

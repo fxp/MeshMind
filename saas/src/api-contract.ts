@@ -17,8 +17,10 @@ const write = (operationId: string, summary: string, parameters: object[], body:
   } });
 const owner = <T extends { security: object[] }>(operation: T) => ({ ...operation, security: [{ OwnerSession: [] }] });
 const device = object({ id: string, gatewayId: string, localId: string, name: string, model: string,
-  connector: { type: "string", enum: ["bambu", "simulator", "adb", "esp32_serial", "home_assistant"] },
-  online: { type: "boolean" }, capabilities: { type: "array", items: string } }, ["id", "gatewayId", "name", "connector", "online", "capabilities"]);
+  connector: { type: "string", enum: ["bambu", "simulator", "adb", "esp32_serial", "usb_serial", "home_assistant", "local_http"] },
+  online: { type: "boolean" }, capabilities: { type: "array", items: string },
+  actions: { type: "array", items: object({ name: string, description: string, destructive: { type: "boolean" } }, ["name", "description", "destructive"]) } },
+  ["id", "gatewayId", "name", "connector", "online", "capabilities"]);
 
 export const apiContract = {
   openapi: "3.1.0",
@@ -30,7 +32,10 @@ export const apiContract = {
     "/devices": { get: { ...read("listDevices", "List only devices visible to this credential", [], object({ devices: { type: "array", items: device } }, ["devices"])), tags: ["Agent"] } },
     "/devices/{deviceId}/state": { get: { ...read("getUnifiedDeviceState", "Read status for any supported connector; response includes connector", [deviceId], object({ deviceId: string, connector: string, status: { type: "object" }, stale: { type: "boolean" } }, ["deviceId", "connector", "status", "stale"])), tags: ["Agent"] } },
     "/devices/{deviceId}/status": { get: { ...read("getPrinterStatus", "Read Bambu printer status", [deviceId]), tags: ["Agent"] } },
-    "/devices/{deviceId}/device-status": { get: { ...read("getDeviceStatus", "Read ESP32 or Home Assistant status", [deviceId]), tags: ["Agent"] } },
+    "/devices/{deviceId}/device-status": { get: { ...read("getDeviceStatus", "Read USB serial, local HTTP, ESP32 or Home Assistant status", [deviceId]), tags: ["Agent"] } },
+    "/devices/{deviceId}/device-actions": { post: { ...write("requestDeviceAction", "Request one locally preconfigured device action; owner approval is required", [deviceId],
+      object({ action: { type: "string", pattern: "^[a-z][a-z0-9_]{0,39}$" }, idempotencyKey }, ["action", "idempotencyKey"]), "202"),
+      responses: { ...write("requestDeviceAction", "", [deviceId], object({}), "202").responses, "200": response("Existing request with the same idempotency key") }, tags: ["Agent"] } },
     "/devices/{deviceId}/adb-status": { get: { ...read("getAdbStatus", "Read Android device status", [deviceId]), tags: ["Agent"] } },
     "/devices/{deviceId}/adb-ui": { get: { ...read("getAdbUi", "Read Android UI XML; may contain personal information", [deviceId]), tags: ["Agent"] } },
     "/devices/{deviceId}/actions": { post: { ...write("requestPrinterAction", "Request printer action; owner approval is required", [deviceId],
@@ -47,7 +52,7 @@ export const apiContract = {
       get: { ...owner(read("listPrincipals", "List user and Agent grants without their secret tokens")), tags: ["Owner"] },
       post: { ...owner(write("createPrincipal", "Issue a scoped credential; token is returned once", [], object({
         name: string, kind: { type: "string", enum: ["user", "agent"] }, devices: { type: "array", items: string },
-        permissions: { type: "array", items: { type: "string", enum: ["status", "pause", "resume", "stop", "adb_ui", "adb_input"] } },
+        permissions: { type: "array", items: { type: "string", enum: ["status", "pause", "resume", "stop", "adb_ui", "adb_input", "device_invoke"] } },
         expiresInHours: { type: "integer", minimum: 1, maximum: 720 },
       }, ["name", "kind", "devices", "permissions"]), "201")), tags: ["Owner"] },
     },
@@ -79,5 +84,6 @@ export const apiContract = {
 export function discovery(origin: string) {
   return { name: "MeshMind", apiVersion: "v1", api: origin + "/api/v1", openapi: origin + "/api/v1/openapi.json",
     mcp: origin + "/mcp", authentication: { type: "bearer", grant: "Owner issues a scoped Agent credential in the MeshMind web UI" },
-    safety: { printerActions: "owner_approval", adbInput: "immediate_when_granted", unknownOutcome: "do_not_automatically_retry" } };
+    safety: { printerActions: "owner_approval", genericDeviceActions: "owner_approval_and_local_allowlist",
+      adbInput: "immediate_when_granted", unknownOutcome: "do_not_automatically_retry" } };
 }

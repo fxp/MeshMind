@@ -5,14 +5,15 @@ import { pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { WebSocket } from "ws";
 import { z } from "zod";
-import { connectorConfig, simulatedPrinter, bambuPrinter, adbDevice, homeAssistantDevice, esp32SerialDevice, type Connector } from "./connectors.ts";
-import { adbInput } from "./schema.ts";
+import { connectorConfig, simulatedPrinter, bambuPrinter, adbDevice, homeAssistantDevice, esp32SerialDevice, usbSerialDevice, localHttpDevice, type Connector } from "./connectors.ts";
+import { adbInput, deviceActionInput } from "./schema.ts";
 
 const gatewayState = z.object({ gatewayId: z.string(), token: z.string(), publicKey: z.string(), privateKey: z.string(), hub: z.string() }).strict();
 const enrollment = z.object({ hub: z.string(), token: z.string() }).strict();
 export const localConfig = z.object({ devices: z.array(connectorConfig).min(1).max(32) }).strict();
 const task = z.object({ kind: z.literal("task"), taskId: z.string().max(80), localId: z.string().max(64),
-  action: z.enum(["status", "pause", "resume", "stop", "adb_input", "adb_ui"]), input: adbInput.optional(), expiresAt: z.number().int() }).strict();
+  action: z.enum(["status", "pause", "resume", "stop", "adb_input", "adb_ui", "device_invoke"]),
+  input: z.union([adbInput, deviceActionInput]).optional(), expiresAt: z.number().int() }).strict();
 
 export function validateHub(value: string): string {
   const url = new URL(value);
@@ -62,7 +63,8 @@ export async function startGateway(options: { stateFile: string; config: z.infer
   const connectors = new Map<string, Connector>();
   for (const d of options.config.devices) connectors.set(d.localId,
     d.connector === "simulator" ? simulatedPrinter(d) : d.connector === "adb" ? adbDevice(d)
-    : d.connector === "home_assistant" ? homeAssistantDevice(d) : d.connector === "esp32_serial" ? esp32SerialDevice(d) : bambuPrinter(d));
+    : d.connector === "home_assistant" ? homeAssistantDevice(d) : d.connector === "esp32_serial" ? esp32SerialDevice(d)
+    : d.connector === "usb_serial" ? usbSerialDevice(d) : d.connector === "local_http" ? localHttpDevice(d) : bambuPrinter(d));
   const manifestJson = JSON.stringify([...connectors.values()].map(d => d.manifest));
   let stopped = false; let retry = 1000; let connection: WebSocket | undefined;
   let reconnectTimer: NodeJS.Timeout | undefined;

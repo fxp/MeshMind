@@ -58,7 +58,7 @@ test("remote MCP uses the same scoped device and approval boundaries", async t =
     const reader = await connect(read.token), controller = await connect(control.token);
 
     await t.test("SDK HTTP initialize, tool discovery, listing and real gateway status",async()=>{
-      assert.deepEqual((await reader.listTools()).tools.map(x=>x.name).sort(),["adb_status","adb_ui","device_status","list_action_requests","list_devices","printer_status","request_adb_input","request_printer_action"]);
+      assert.deepEqual((await reader.listTools()).tools.map(x=>x.name).sort(),["adb_status","adb_ui","device_status","invoke_device_action","list_action_requests","list_devices","printer_status","request_adb_input","request_printer_action"]);
       assert.equal(unpack(await reader.callTool({name:"list_devices"})).devices[0].id,device.id);
       const status = await reader.callTool({name:"printer_status",arguments:{deviceId:device.id}});
       assert.equal(status.isError,false); assert.equal(unpack(status).status.progress,42);
@@ -105,7 +105,7 @@ test("remote MCP uses the same scoped device and approval boundaries", async t =
     await t.test("malformed and oversized MCP requests are bounded and cannot execute batches",async()=>{
       assert.equal((await raw({authorization:`Bearer ${read.token}`},[{jsonrpc:"2.0",id:1,method:"tools/list"}])).status,400);
       assert.equal((await raw({authorization:`Bearer ${read.token}`},{padding:"x".repeat(70000)})).status,413);
-      assert.ok((await reader.listTools()).tools.length===8);
+      assert.ok((await reader.listTools()).tools.length===9);
     });
     await t.test("revocation and expiry apply on an already initialized HTTP client",async()=>{
       await api(`/api/principals/${control.id}`,undefined,owner,"DELETE");

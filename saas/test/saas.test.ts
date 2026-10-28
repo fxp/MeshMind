@@ -158,7 +158,7 @@ test("SaaS tenant, gateway, delegation, approval and MCP boundaries", async t =>
       const client = new Client({ name: "codex-showcase-test", version: "1.0.0" });
       try {
         await client.connect(transport);
-        assert.deepEqual((await client.listTools()).tools.map(t => t.name).sort(), ["adb_status", "adb_ui", "device_status", "list_action_requests", "list_devices", "printer_status", "request_adb_input", "request_printer_action"]);
+        assert.deepEqual((await client.listTools()).tools.map(t => t.name).sort(), ["adb_status", "adb_ui", "device_status", "invoke_device_action", "list_action_requests", "list_devices", "printer_status", "request_adb_input", "request_printer_action"]);
         const answer = await client.callTool({ name: "printer_status", arguments: { deviceId: device.id } });
         assert.equal(answer.isError, false);
         assert.equal(JSON.parse((answer.content as { text: string }[])[0].text).status.state, "PAUSE");

@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createServer } from "node:net";
 import { createApp } from "../src/server.ts";
+import { seedOwner } from "../test/support/owner.ts";
 
 const dir = await mkdtemp(join(tmpdir(), "meshmind-mac-bundle-"));
 const reservation = createServer(); reservation.listen(0, "127.0.0.1"); await once(reservation, "listening");
@@ -22,13 +23,14 @@ const api = async (path: string, value?: unknown, cookie?: string) => {
 };
 let child: ReturnType<typeof spawn> | undefined;
 try {
-  const owner = (await api("/api/register", { email: "mac-bundle@example.test", password: "long-test-password" })).cookie!;
+  const owner = seedOwner(app.store, "mac-bundle@example.test");
   const enrollment = (await api("/api/gateways", { name: "Mac bundle smoke" }, owner)).value;
   await writeFile(join(dir, "gateway.json"), JSON.stringify({ devices: [
     { localId: "demo", name: "Bundled simulator", model: "X1C", connector: "simulator" }] }), { mode: 0o600 });
   await writeFile(join(dir, "enrollment.json"), JSON.stringify({ ...enrollment.enrollment, hub: base }), { mode: 0o600 });
   child = spawn(join(resources, "node"), [join(resources, "gateway.cjs"), "--config", join(dir, "gateway.json"),
-    "--enroll", join(dir, "enrollment.json"), "--state", join(dir, "state.json")], { stdio: "ignore" });
+    "--enroll", join(dir, "enrollment.json"), "--state", join(dir, "state.json")],
+    { stdio: ["ignore", "inherit", "inherit"], env: { ...process.env, MESHMIND_DIAGNOSTICS: "1" } });
   const deadline = Date.now() + 8000;
   while (!app.broker.online(enrollment.gatewayId)) {
     if (child.exitCode !== null) throw new Error("Bundled gateway exited before connecting");

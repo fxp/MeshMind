@@ -6,7 +6,7 @@ saas_dir=${script_dir:h}
 dist_dir="$script_dir/dist"
 build_dir="$script_dir/build"
 app="$build_dir/MeshMind Connect.app"
-archive="$dist_dir/MeshMind-Connect-macOS-arm64-0.1.1.zip"
+archive="$dist_dir/MeshMind-Connect-macOS-arm64-0.1.2.zip"
 node_bin="$(command -v node)"
 
 if [[ "$(uname -m)" != "arm64" ]]; then

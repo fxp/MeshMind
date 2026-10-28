@@ -37,6 +37,11 @@ node meshmind-cli.mjs actions list
 node meshmind-cli.mjs actions printer dev_0123456789abcdef01234567 pause \
   --idempotency-key planned-pause-20261027
 
+# USB 串口或局域网设备：ACTION 必须来自 devices list 返回的 actions。
+# 该请求等待所有者批准；Agent 无法提交任意命令、URL 或请求体。
+node meshmind-cli.mjs actions device dev_0123456789abcdef01234567 power_on \
+  --idempotency-key planned-power-on-20261028
+
 # ADB 输入只有获授 adb_input 的凭证才能调用，且会立即执行。
 node meshmind-cli.mjs actions adb dev_0123456789abcdef01234567 \
   --input-json '{"kind":"keyevent","key":"HOME"}' \
@@ -52,6 +57,7 @@ node meshmind-cli.mjs actions adb dev_0123456789abcdef01234567 \
 - API 基础路径：`/api/v1`；旧 `/api` 路径继续兼容。
 - Agent 身份：每次请求发送 `Authorization: Bearer <独立访问凭证>`。不得将凭证放进查询参数、日志或公开代码。
 - 统一状态：`GET /api/v1/devices/{deviceId}/state`。
+- 通用设备操作：`POST /api/v1/devices/{deviceId}/device-actions`，请求体只包含 `action` 和 `idempotencyKey`。
 - 操作记录：`GET /api/v1/approvals`。
 - 错误：非 2xx 响应为 `{"error":"..."}`。常见状态码：`400` 参数无效、`401` 凭证失效、`403` 权限或本地能力未开放、`404` 资源不可见、`409` 幂等键冲突、`429` 限流、`503` 网关离线。
 

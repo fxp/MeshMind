@@ -48,7 +48,7 @@ npm run cf:smoke -- --hub http://localhost:8790
 
 ## 验证与恢复
 
-- 44 项自动化测试、Cloudflare 类型检查和 Mac 打包运行时联调，包含 ADB 设备权限与审批链路、Home Assistant 限定实体读取。
+- 51 项自动化测试、Cloudflare 类型检查和 Mac 打包运行时联调，包含 ADB 权限、通用 USB／局域网设备本地操作白名单、所有者审批链路及 Home Assistant 限定实体读取。
 - Cloudflare 本地运行时完整验证：9 项检查，含重复 MCP 请求、网关 WSS、状态读取、审批执行及撤销；本地运行时重启后原账号仍可登录。
 - 线上通过同一模拟器流程检查；结果见 `SAAS-VERIFICATION.md`。
 - 不提供公网数据库管理接口。数据恢复使用 Cloudflare 的 Durable Objects SQLite 存储恢复能力；代码回滚不会回滚数据库。恢复前应核对目标实例、时间点及可能重复或未知的设备操作，不能自动重放动作。

@@ -112,7 +112,7 @@ export default {
       legacyUrl.pathname = legacyPath;
       return hubFetch(new Request(legacyUrl, request));
     }
-    const releases = ["MeshMind-Connect-macOS-arm64-0.1.0.zip", "MeshMind-Connect-macOS-arm64-0.1.1.zip"];
+    const releases = ["MeshMind-Connect-macOS-arm64-0.1.0.zip", "MeshMind-Connect-macOS-arm64-0.1.1.zip", "MeshMind-Connect-macOS-arm64-0.1.2.zip"];
     if ((request.method === "GET" || request.method === "HEAD") &&
         releases.some(archive => [archive, archive + ".sha256"].includes(url.pathname.slice("/downloads/".length))) &&
         url.pathname.startsWith("/downloads/")) {

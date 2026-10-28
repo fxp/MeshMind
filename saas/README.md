@@ -84,14 +84,14 @@ Google 登录需要用户浏览器和 Hub 都能访问相应 Google 服务；设
 
 ## MeshMind Connect for Mac
 
-线上「连接网关」页面提供 [Apple Silicon 安装包](https://mesh.xiaopingfeng.com/downloads/MeshMind-Connect-macOS-arm64-0.1.1.zip) 与 [SHA-256 校验文件](https://mesh.xiaopingfeng.com/downloads/MeshMind-Connect-macOS-arm64-0.1.1.zip.sha256)。要求 macOS 14 或更新版本。程序内置 Node 网关运行时，不要求用户安装仓库依赖。
+线上「连接网关」页面提供 [Apple Silicon 安装包](https://mesh.xiaopingfeng.com/downloads/MeshMind-Connect-macOS-arm64-0.1.2.zip) 与 [SHA-256 校验文件](https://mesh.xiaopingfeng.com/downloads/MeshMind-Connect-macOS-arm64-0.1.2.zip.sha256)。要求 macOS 14 或更新版本。程序内置 Node 网关运行时，不要求用户安装仓库依赖。
 
 1. 下载并解压，将 `MeshMind Connect.app` 放到「应用程序」文件夹。当前是 **开发预览版**，只有 ad-hoc 签名，尚无 Apple Developer ID 签名和公证；macOS 首次运行可能需要在「系统设置 → 隐私与安全性」中选择「仍要打开」。公开正式版必须补齐签名、公证与自动更新。
 2. 打开程序，添加这台 Mac 能访问的设备。同一个 Mac 网关可以添加多台设备，无需给每台设备创建网关。
 3. 在 MeshMind 网站的「连接网关」生成一次性入网文件，并在十分钟内通过程序导入。程序把网关身份和本地设备配置保存到当前用户的 `~/Library/Application Support/MeshMind Connect/`，权限限制为当前用户；入网成功后删除一次性文件。可选「登录 Mac 后自动启动」。
-4. 网页「设备总览」显示在线设备后，在「用户与 Agent」分别签发范围受限的访问凭证。`device_status` MCP 工具读取 ESP32 或 Home Assistant 状态。
+4. 网页「设备总览」显示在线设备后，在「用户与 Agent」分别签发范围受限的访问凭证。`device_status` MCP 工具读取 USB、局域网 HTTP 或 Home Assistant 状态；`invoke_device_action` 申请执行本地预声明的操作。
 
-ADB 只连接界面中选择、且已通过本机 USB 调试授权的设备；读取界面与结构化输入分别需要在本地开启，并由网站按设备、Agent、能力和有效期授权。已授予 `adb_input` 后，输入操作直接执行并留下审计记录，不再逐次审批。打印机控制仍需所有者逐次审批。ESP32 使用 `/dev/cu.*` 串口，固件每行输出一个 UTF-8 值或 `{"state":"online","value":"23.5","unit":"°C"}`；60 秒没有新数据就拒绝提供新状态。Home Assistant 使用本地填写的 URL、长期令牌与单个实体 ID，通过 `/api/states/<entity_id>` 读取。**ESP32 与 Home Assistant 当前只读**，不提供任意串口写入、HA service call 或局域网代理。实体令牌保存在本机当前用户可读的配置文件中，不上传 Hub。
+ADB 只连接界面中选择、且已通过本机 USB 调试授权的设备；读取界面与结构化输入分别需要在本地开启，并由网站按设备、Agent、能力和有效期授权。已授予 `adb_input` 后，输入操作直接执行并留下审计记录，不再逐次审批。打印机控制仍需所有者逐次审批。任意 USB 串口设备使用 `/dev/cu.*`，每行输出一个 UTF-8 值或 `{"state":"online","value":"23.5","unit":"°C"}`；60 秒没有新数据就拒绝提供新状态。局域网 HTTP 设备配置固定状态路径和可选 Bearer 令牌。USB 与 HTTP 设备各自可以在 Mac 端声明固定操作；Agent 只能提交操作名，所有者批准后才执行。串口命令、局域网地址、请求路径、请求体和令牌都不会上传 Hub。Home Assistant 使用本地填写的 URL、长期令牌与单个实体 ID，通过 `/api/states/<entity_id>` 读取，当前保持只读。
 
 已经在同一台 Mac 上运行命令行网关时，直接再创建新网关会让同一个实体出现两次。迁移前应先规划停用旧网关，并为新设备 ID 重新签发 Agent 凭证；当前 Mac 程序还不自动接管旧命令行网关身份。程序源码、构建脚本和图标位于 `saas/macos/`；运行 `./macos/build.sh` 后用 `npm run mac:smoke` 验证打包后的运行时。
 
@@ -154,13 +154,14 @@ npm run gateway -- --config gateway.x1c.json --enroll /absolute/path/enrollment.
 
 Agent 也可以直接使用 JSON CLI 和版本化 HTTP API，无需 MCP 客户端；参见[网页接入指南](https://mesh.xiaopingfeng.com/docs/agent-api)或仓库中的[Agent CLI 与 API 指南](../docs/AGENT-API.md)。登录页和「用户与 Agent」均提供入口。
 
-MCP 使用官方 SDK，同时提供直接连接的 Streamable HTTP 入口和本地 stdio 桥接。两种方式共用以下八个工具及同一套权限、审批和审计规则：
+MCP 使用官方 SDK，同时提供直接连接的 Streamable HTTP 入口和本地 stdio 桥接。两种方式共用以下九个工具及同一套权限、审批和审计规则：
 
 | 工具 | 行为 |
 |---|---|
 | `list_devices` | 仅列出该凭证获授权的设备 |
 | `printer_status` | 读取状态，包含 `observedAt` 和 `stale` |
-| `device_status` | 读取 ESP32 串口或 Home Assistant 实体状态 |
+| `device_status` | 读取 USB 串口、局域网 HTTP 或 Home Assistant 实体状态 |
+| `invoke_device_action` | 申请执行本地预声明的命名操作；必须所有者批准 |
 | `request_printer_action` | 申请暂停、恢复、停止；必须所有者批准 |
 | `list_action_requests` | 查询此凭证提交的审批或直接操作记录与结果 |
 | `adb_status` | 读取获授权 Android 设备的连接状态 |

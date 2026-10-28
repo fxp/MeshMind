@@ -18,12 +18,23 @@ struct LocalDevice: Codable, Identifiable {
     var haUrl: String? = nil
     var haToken: String? = nil
     var haEntityId: String? = nil
+    var httpUrl: String? = nil
+    var httpStatusPath: String? = nil
+    var httpToken: String? = nil
+    var actionName: String? = nil
+    var actionDescription: String? = nil
+    var actionCommand: String? = nil
+    var actionPath: String? = nil
+    var actionBody: String? = nil
+    var actionDestructive: Bool? = nil
 
     var kindLabel: String {
         switch connector {
         case "adb": "Android · ADB"
         case "esp32_serial": "ESP32 · USB 串口"
+        case "usb_serial": "通用 USB 串口"
         case "home_assistant": "Home Assistant"
+        case "local_http": "局域网 HTTP 设备"
         default: connector
         }
     }
@@ -39,6 +50,21 @@ struct LocalDevice: Codable, Identifiable {
         if let haUrl { value["haUrl"] = haUrl }
         if let haToken { value["haToken"] = haToken }
         if let haEntityId { value["haEntityId"] = haEntityId }
+        if let httpUrl { value["httpUrl"] = httpUrl }
+        if let httpStatusPath { value["httpStatusPath"] = httpStatusPath }
+        if let httpToken { value["httpToken"] = httpToken }
+        if let actionName, let actionDescription {
+            if connector == "usb_serial", let actionCommand {
+                value["serialActions"] = [["name": actionName, "description": actionDescription,
+                                             "command": actionCommand, "destructive": actionDestructive ?? true]]
+            } else if connector == "local_http", let actionPath {
+                var action: [String: Any] = ["name": actionName, "description": actionDescription,
+                                             "method": "POST", "path": actionPath, "destructive": actionDestructive ?? true]
+                if let actionBody, !actionBody.isEmpty, let data = actionBody.data(using: .utf8),
+                   let body = try? JSONSerialization.jsonObject(with: data) { action["body"] = body }
+                value["httpActions"] = [action]
+            }
+        }
         return value
     }
 }
@@ -258,6 +284,15 @@ struct ConnectView: View {
     @State private var haUrl = "http://homeassistant.local:8123"
     @State private var haEntityId = ""
     @State private var haToken = ""
+    @State private var httpUrl = "http://192.168.1.100"
+    @State private var httpStatusPath = "/status"
+    @State private var httpToken = ""
+    @State private var actionName = ""
+    @State private var actionDescription = ""
+    @State private var actionCommand = ""
+    @State private var actionPath = "/action"
+    @State private var actionBody = ""
+    @State private var actionDestructive = true
 
     var body: some View {
         ScrollView {
@@ -293,7 +328,7 @@ struct ConnectView: View {
                         if model.devices.isEmpty { Text("还没有设备。下面选择一种接入方式。").foregroundStyle(.secondary) }
                         ForEach(model.devices) { device in
                             HStack {
-                                Image(systemName: device.connector == "adb" ? "iphone" : device.connector == "esp32_serial" ? "cable.connector" : "house")
+                                Image(systemName: device.connector == "adb" ? "iphone" : ["esp32_serial", "usb_serial"].contains(device.connector) ? "cable.connector" : device.connector == "local_http" ? "network" : "house")
                                 VStack(alignment: .leading) {
                                     Text(device.name).fontWeight(.semibold)
                                     Text("\(device.kindLabel) · \(device.model)").font(.caption).foregroundStyle(.secondary)
@@ -309,8 +344,10 @@ struct ConnectView: View {
                         Picker("设备类型", selection: $selectedKind) {
                             Text("Android · ADB").tag("adb")
                             Text("ESP32 · USB 串口").tag("esp32_serial")
+                            Text("通用 USB 串口").tag("usb_serial")
                             Text("Home Assistant").tag("home_assistant")
-                        }.pickerStyle(.segmented)
+                            Text("局域网 HTTP").tag("local_http")
+                        }.pickerStyle(.menu)
                         HStack { TextField("显示名称", text: $name); Button("刷新本机设备") { model.refreshHardware() } }
                         if selectedKind == "adb" {
                             if model.adbExecutable.isEmpty { Text("未找到 adb。请先安装 Android Platform Tools。") .foregroundStyle(.orange) }
@@ -320,7 +357,7 @@ struct ConnectView: View {
                             }
                             Toggle("允许读取当前界面结构", isOn: $allowUiDump)
                             Toggle("允许获授权的 Agent 直接点击和按键（无需逐次审批，操作会记录）", isOn: $allowControl)
-                        } else if selectedKind == "esp32_serial" {
+                        } else if ["esp32_serial", "usb_serial"].contains(selectedKind) {
                             Picker("USB 串口", selection: $serialPort) {
                                 Text("请选择").tag("")
                                 ForEach(model.serialPorts, id: \.self) { Text($0).tag($0) }
@@ -328,19 +365,27 @@ struct ConnectView: View {
                             Picker("波特率", selection: $baudRate) {
                                 ForEach([9600, 57600, 115200, 230400, 460800, 921600], id: \.self) { Text(String($0)).tag($0) }
                             }
-                            Text("ESP32 每行输出一个 UTF-8 值，或 JSON：{\"state\":\"online\",\"value\":\"23.5\",\"unit\":\"°C\"}。当前只读取。")
+                            Text("设备每行输出一个 UTF-8 值，或 JSON：{\"state\":\"online\",\"value\":\"23.5\",\"unit\":\"°C\"}。")
                                 .font(.caption).foregroundStyle(.secondary)
-                        } else {
+                            if selectedKind == "usb_serial" { actionFields(serial: true) }
+                        } else if selectedKind == "home_assistant" {
                             TextField("Home Assistant 地址", text: $haUrl)
                             TextField("实体 ID，例如 sensor.living_room_temperature", text: $haEntityId)
                             SecureField("长期访问令牌", text: $haToken)
                             Text("只读取指定实体；令牌保存在这台 Mac 的当前用户目录，不上传到 Mesh。")
                                 .font(.caption).foregroundStyle(.secondary)
+                        } else {
+                            TextField("设备地址，例如 http://192.168.1.100", text: $httpUrl)
+                            TextField("固定状态路径，例如 /status", text: $httpStatusPath)
+                            SecureField("Bearer 令牌（可选）", text: $httpToken)
+                            actionFields(serial: false)
+                            Text("地址、令牌、操作路径和请求体只保存在这台 Mac。Agent 只能选择这里预先定义的操作名。")
+                                .font(.caption).foregroundStyle(.secondary)
                         }
                         Button("添加设备") { addDevice() }.buttonStyle(.borderedProminent).disabled(!canAdd)
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(8)
                 }
-                Text("设备网关从本机主动连接 Mesh；USB、ADB 和 Home Assistant 的地址及凭证只留在本机。Agent 只看到你在网页中单独授权的设备与能力。")
+                Text("设备网关从本机主动连接 Mesh；USB、ADB、局域网地址及凭证只留在本机。Agent 只看到你在网页中单独授权的设备与能力。")
                     .font(.caption).foregroundStyle(.secondary)
             }.padding(26).frame(maxWidth: 820)
         }
@@ -355,26 +400,78 @@ struct ConnectView: View {
         switch selectedKind {
         case "adb": !adbSerial.isEmpty && !model.adbExecutable.isEmpty
         case "esp32_serial": !serialPort.isEmpty
-        default: URL(string: haUrl)?.host != nil && haEntityId.contains(".") && !haToken.isEmpty
+        case "usb_serial": !serialPort.isEmpty && validOptionalAction(serial: true)
+        case "home_assistant": URL(string: haUrl)?.host != nil && haEntityId.contains(".") && !haToken.isEmpty
+        default: validHttpBase(httpUrl) && validFixedPath(httpStatusPath) && validOptionalAction(serial: false)
         }
+    }
+
+    @ViewBuilder private func actionFields(serial: Bool) -> some View {
+        Divider()
+        Text("可选：添加一个可供 Agent 申请的命名操作").font(.caption).foregroundStyle(.secondary)
+        TextField("操作名，例如 turn_on", text: $actionName)
+        TextField("给用户看的说明，例如 打开设备", text: $actionDescription)
+        if serial { TextField("固定串口命令，例如 POWER ON", text: $actionCommand) }
+        else {
+            TextField("固定 POST 路径，例如 /api/power", text: $actionPath)
+            TextField("固定 JSON 请求体（可选）", text: $actionBody)
+        }
+        Toggle("这是可能改变设备状态的操作", isOn: $actionDestructive)
+    }
+
+    private func validOptionalAction(serial: Bool) -> Bool {
+        if actionName.isEmpty && actionDescription.isEmpty && (serial ? actionCommand.isEmpty : true) { return true }
+        guard actionName.range(of: "^[a-z][a-z0-9_]{0,39}$", options: .regularExpression) != nil,
+              !actionDescription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        if serial { return !actionCommand.isEmpty && !actionCommand.contains("\n") && !actionCommand.contains("\r") }
+        guard validFixedPath(actionPath) else { return false }
+        if actionBody.isEmpty { return true }
+        guard let data = actionBody.data(using: .utf8) else { return false }
+        return (try? JSONSerialization.jsonObject(with: data)) != nil
+    }
+
+    private func validFixedPath(_ value: String) -> Bool {
+        value.count <= 240 && value.hasPrefix("/") && !value.hasPrefix("//") &&
+            !value.contains("?") && !value.contains("#") && !value.split(separator: "/").contains("..")
+    }
+
+    private func validHttpBase(_ value: String) -> Bool {
+        guard let url = URLComponents(string: value), ["http", "https"].contains(url.scheme),
+              url.host != nil, url.user == nil, url.password == nil, url.query == nil, url.fragment == nil else { return false }
+        return true
     }
 
     private func addDevice() {
         let label = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let title = label.isEmpty ? (selectedKind == "adb" ? "本机 Android" : selectedKind == "esp32_serial" ? "ESP32 串口" : haEntityId) : label
+        let fallback = selectedKind == "adb" ? "本机 Android" : selectedKind == "esp32_serial" ? "ESP32 串口"
+            : selectedKind == "usb_serial" ? "USB 串口设备" : selectedKind == "home_assistant" ? haEntityId : "局域网设备"
+        let title = label.isEmpty ? fallback : label
         let localId = "mac-" + UUID().uuidString.lowercased().prefix(12)
         var device = LocalDevice(localId: String(localId), name: title,
-                                 model: selectedKind == "adb" ? "Android via ADB" : selectedKind == "esp32_serial" ? "USB serial" : "Home Assistant entity",
+                                 model: selectedKind == "adb" ? "Android via ADB" : ["esp32_serial", "usb_serial"].contains(selectedKind) ? "USB serial"
+                                    : selectedKind == "home_assistant" ? "Home Assistant entity" : "Local HTTP device",
                                  connector: selectedKind)
         if selectedKind == "adb" {
             device.adbSerial = adbSerial; device.adbPath = model.adbExecutable
             device.allowUiDump = allowUiDump; device.allowControl = allowControl
-        } else if selectedKind == "esp32_serial" {
+        } else if ["esp32_serial", "usb_serial"].contains(selectedKind) {
             device.serialPort = serialPort; device.baudRate = baudRate
-        } else { device.haUrl = haUrl; device.haEntityId = haEntityId; device.haToken = haToken; haToken = "" }
+        } else if selectedKind == "home_assistant" {
+            device.haUrl = haUrl; device.haEntityId = haEntityId; device.haToken = haToken; haToken = ""
+        } else {
+            device.httpUrl = httpUrl; device.httpStatusPath = httpStatusPath
+            if !httpToken.isEmpty { device.httpToken = httpToken }; httpToken = ""
+        }
+        if ["usb_serial", "local_http"].contains(selectedKind) && !actionName.isEmpty {
+            device.actionName = actionName; device.actionDescription = actionDescription
+            device.actionDestructive = actionDestructive
+            if selectedKind == "usb_serial" { device.actionCommand = actionCommand }
+            else { device.actionPath = actionPath; if !actionBody.isEmpty { device.actionBody = actionBody } }
+        }
         model.devices.append(device)
         model.saveDevices()
         name = ""
+        actionName = ""; actionDescription = ""; actionCommand = ""; actionBody = ""
     }
 }
 

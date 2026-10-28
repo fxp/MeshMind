@@ -14,4 +14,8 @@ async function main() {
     log: message => console.log(message) });
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => { gateway.stop(); process.exit(0); });
 }
-main().catch(() => { console.error("网关启动失败，请检查设备配置或入网文件。不会输出密钥。"); process.exitCode = 1; });
+main().catch(error => {
+  console.error("网关启动失败，请检查设备配置或入网文件。不会输出密钥。");
+  if (process.env.MESHMIND_DIAGNOSTICS === "1") console.error(error instanceof Error ? error.stack : "UnknownError");
+  process.exitCode = 1;
+});

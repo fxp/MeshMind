@@ -26,16 +26,19 @@ test("CLI discovers unauthenticated contract and sends bearer only to the chosen
   assert.equal(s.calls.length, 2);
 });
 
-test("CLI distinguishes approval request from immediate ADB execution", async () => {
+test("CLI distinguishes approval requests from immediate ADB execution", async () => {
   const id = "dev_" + "a".repeat(24);
   const s = stub();
   await runCli(["actions", "printer", id, "pause", "--idempotency-key", "same-action-001"], env, s.fetcher);
   assert.equal(s.calls[0].url, `https://mesh.example.test/api/v1/devices/${id}/actions`);
   assert.deepEqual(JSON.parse(s.calls[0].init.body), { action: "pause", idempotencyKey: "same-action-001" });
+  await runCli(["actions", "device", id, "power_on", "--idempotency-key", "same-action-003"], env, s.fetcher);
+  assert.equal(s.calls[1].url, `https://mesh.example.test/api/v1/devices/${id}/device-actions`);
+  assert.deepEqual(JSON.parse(s.calls[1].init.body), { action: "power_on", idempotencyKey: "same-action-003" });
   await assert.rejects(() => runCli(["actions", "adb", id, "--input-json", '{"kind":"tap","x":1,"y":2}'], env, s.fetcher), /--execute/);
-  assert.equal(s.calls.length, 1);
+  assert.equal(s.calls.length, 2);
   await runCli(["actions", "adb", id, "--input-json", '{"kind":"tap","x":1,"y":2}', "--execute", "--idempotency-key", "same-action-002"], env, s.fetcher);
-  assert.deepEqual(JSON.parse(s.calls[1].init.body), { input: { kind: "tap", x: 1, y: 2 }, idempotencyKey: "same-action-002" });
+  assert.deepEqual(JSON.parse(s.calls[2].init.body), { input: { kind: "tap", x: 1, y: 2 }, idempotencyKey: "same-action-002" });
 });
 
 test("CLI preserves HTTP error status without leaking bearer", async () => {

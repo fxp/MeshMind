@@ -1,6 +1,6 @@
 const $ = (selector) => document.querySelector(selector);
 const labels = { devices: '设备总览', gateways: '连接网关', access: '用户与 Agent', approvals: '操作记录', audit: '访问记录' };
-const actions = { status: '查看状态', pause: '暂停', resume: '恢复', stop: '停止', adb_input: 'ADB 输入', adb_ui: '读取界面' };
+const actions = { status: '查看状态', pause: '暂停', resume: '恢复', stop: '停止', adb_input: 'ADB 输入', adb_ui: '读取界面', device_invoke: '通用设备操作' };
 const states = { pending: '等待审批', expired: '已到期', revoked: '已撤销', rejected: '已拒绝', executing: '正在发送', completed: '执行完成', delivered: '已发送 · 设备执行未确认', unknown: '结果未知 · 请检查设备' };
 let token, actor, devices = [], gateways = [], principals = [], approvals = [], current = 'devices', noticeTimer, googleEnabled = false;
 function element(tag, text, className) { const e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (className) e.className = className; return e; }
@@ -46,20 +46,23 @@ function renderDevices() {
     const card = element('article', undefined, 'device-card'), header = element('header');
     header.append(element('span', d.connector === 'simulator' ? 'SIMULATED / 演示' : 'LOCAL / 本地接入', 'tag'), element('span', d.online ? '● 网关在线' : '○ 网关离线', 'status-dot' + (d.online ? ' online' : '')));
     const art = element('div', undefined, 'printer-art'); art.setAttribute('aria-hidden', 'true');
-    if (d.connector === 'adb' || d.connector === 'esp32_serial' || d.connector === 'home_assistant')
-      art.append(element('div', d.connector === 'adb' ? '▣' : d.connector === 'esp32_serial' ? '⌁' : '⌂', 'android-icon'));
+    if (['adb', 'esp32_serial', 'usb_serial', 'home_assistant', 'local_http'].includes(d.connector))
+      art.append(element('div', d.connector === 'adb' ? '▣' : ['esp32_serial', 'usb_serial'].includes(d.connector) ? '⌁' : d.connector === 'local_http' ? '↔' : '⌂', 'android-icon'));
     else { const printer = element('div', undefined, 'printer'); printer.append(element('div', undefined, 'print-object')); art.append(printer); }
     const body = element('div', undefined, 'device-body'), status = element('div', undefined, 'device-status');
     status.append(element('p', d.online ? '点击读取，查看设备的最新报告。' : '请检查所在网络的网关。', 'muted'));
     body.append(element('h3', d.name), element('div', d.model, 'device-model'), status);
     const footer = element('div', undefined, 'device-footer');
-    const readRoute = d.connector === 'adb' ? 'adb-status' : ['esp32_serial', 'home_assistant'].includes(d.connector) ? 'device-status' : 'status';
+    const readRoute = d.connector === 'adb' ? 'adb-status' : ['esp32_serial', 'usb_serial', 'home_assistant', 'local_http'].includes(d.connector) ? 'device-status' : 'status';
     const read = button('读取状态 ↗', async () => renderStatus(status, await api(`/api/devices/${d.id}/${readRoute}`))); read.disabled = !d.online; footer.append(read);
     if (d.connector === 'adb' && d.capabilities.includes('adb_ui')) {
       const ui = button('读取界面结构 ↗', async () => { const result = await api(`/api/devices/${d.id}/adb-ui`); status.replaceChildren(element('pre', result.ui.xml, 'adb-ui-xml')); });
       ui.disabled = !d.online; footer.append(ui);
     }
-    if (!actor.owner) for (const action of d.capabilities.filter(a => !['status', 'adb_input', 'adb_ui'].includes(a))) footer.append(button(`申请${actions[action]}`, async () => {
+    if (!actor.owner && d.capabilities.includes('device_invoke')) for (const action of d.actions ?? []) footer.append(button(`申请：${action.description}`, async () => {
+      const reply = await api(`/api/devices/${d.id}/device-actions`, { action: action.name, idempotencyKey: crypto.randomUUID() }); note('已提交设备操作申请，所有者批准前不会执行。'); approvals.unshift(reply.approval); renderApprovals();
+    }));
+    if (!actor.owner) for (const action of d.capabilities.filter(a => !['status', 'adb_input', 'adb_ui', 'device_invoke'].includes(a))) footer.append(button(`申请${actions[action]}`, async () => {
       const reply = await api(`/api/devices/${d.id}/actions`, { action, idempotencyKey: crypto.randomUUID() }); note('已提交申请，所有者批准前不会执行。'); approvals.unshift(reply.approval); renderApprovals();
     }));
     body.append(footer, element('div', d.id, 'device-id')); card.append(header, art, body); list.append(card);
@@ -110,8 +113,8 @@ function renderApprovals() {
   const list = $('#approvals'); list.replaceChildren(); if (!approvals.length) empty(list, '没有操作记录', 'ADB 输入记录和打印机控制申请会出现在这里。');
   for (const a of approvals) {
     const d = devices.find(d => d.id === a.deviceId), p = principals.find(p => p.id === a.principalId);
-    const detail = a.action === 'adb_input' ? ` · ${JSON.stringify(a.input)}` : '';
-    const { r, right } = row(`${actions[a.action]} · ${d?.name ?? a.deviceId}`, `${p?.name ?? '当前访问者'} · ${states[a.state] ?? a.state} · ${date(a.createdAt)}${detail}`);
+    const detail = a.action === 'adb_input' ? ` · ${JSON.stringify(a.input)}` : a.action === 'device_invoke' ? ` · ${a.input?.action ?? '未知操作'}` : '';
+    const { r, right } = row(`${actions[a.action] ?? a.action} · ${d?.name ?? a.deviceId}`, `${p?.name ?? '当前访问者'} · ${states[a.state] ?? a.state} · ${date(a.createdAt)}${detail}`);
     if (actor.owner && a.state === 'pending' && a.expiresAt > Date.now()) {
       right.append(button('拒绝', async () => { await api(`/api/approvals/${a.id}/reject`, {}); await refresh(); }));
       right.append(button('批准执行', async () => { if (!confirm(`批准${actions[a.action]}「${d?.name ?? a.deviceId}」${detail}？这会向设备发送操作。`)) return; await api(`/api/approvals/${a.id}/approve`, {}); await refresh(); }, 'approve'));

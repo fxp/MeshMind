@@ -4,7 +4,15 @@ export const MAX_ADB_UI_XML_BYTES = 32768;
 
 export const controlAction = z.enum(["pause", "resume", "stop"]);
 export type ControlAction = z.infer<typeof controlAction>;
-export const permission = z.enum(["status", "pause", "resume", "stop", "adb_input", "adb_ui"]);
+export const permission = z.enum(["status", "pause", "resume", "stop", "adb_input", "adb_ui", "device_invoke"]);
+export const deviceActionName = z.string().regex(/^[a-z][a-z0-9_]{0,39}$/);
+export const deviceAction = z.object({
+  name: deviceActionName,
+  description: z.string().trim().min(1).max(120),
+  destructive: z.boolean(),
+}).strict();
+export const deviceActionInput = z.object({ action: deviceActionName }).strict();
+export type DeviceActionInput = z.infer<typeof deviceActionInput>;
 export const adbInput = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("tap"), x: z.number().int().min(0).max(10000), y: z.number().int().min(0).max(10000) }).strict(),
   z.object({ kind: z.literal("swipe"), x1: z.number().int().min(0).max(10000), y1: z.number().int().min(0).max(10000), x2: z.number().int().min(0).max(10000), y2: z.number().int().min(0).max(10000), durationMs: z.number().int().min(100).max(2000) }).strict(),
@@ -17,8 +25,9 @@ export const deviceManifest = z.object({
   localId,
   name: z.string().trim().min(1).max(80),
   model: z.string().trim().min(1).max(80),
-  connector: z.enum(["bambu", "simulator", "adb", "esp32_serial", "home_assistant"]),
-  capabilities: z.array(permission).min(1).max(6),
+  connector: z.enum(["bambu", "simulator", "adb", "esp32_serial", "usb_serial", "home_assistant", "local_http"]),
+  capabilities: z.array(permission).min(1).max(7),
+  actions: z.array(deviceAction).max(16).optional(),
 }).strict();
 export type DeviceManifest = z.infer<typeof deviceManifest>;
 
@@ -39,6 +48,11 @@ export const genericStatus = z.object({
   value: z.string().max(160).nullable(),
   unit: z.string().max(32).nullable(),
   observedAt: z.number().int().positive(),
+}).strict();
+export const deviceActionResult = z.object({
+  delivery: z.enum(["executed", "published"]),
+  deviceAcknowledged: z.boolean(),
+  summary: z.string().max(160).optional(),
 }).strict();
 
 export class HttpError extends Error {
