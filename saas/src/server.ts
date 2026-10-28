@@ -33,7 +33,7 @@ const principalInput = z.object({
   permissions: z.array(permission).min(1).max(7).refine(p => p.includes("status"), "必须包含 status"),
   expiresInHours: z.number().int().min(1).max(24 * 30).default(24),
 }).strict();
-const staticFiles = new Map([["/", ["index.html", "text/html; charset=utf-8"]], ["/docs/agent-api", ["agent-api.html", "text/html; charset=utf-8"]], ["/app.js", ["app.js", "text/javascript; charset=utf-8"]], ["/app.css", ["app.css", "text/css; charset=utf-8"]], ["/skill.css", ["skill.css", "text/css; charset=utf-8"]], ["/meshmind-cli.mjs", ["meshmind-cli.mjs", "text/javascript; charset=utf-8"]], ["/skills/meshmind/SKILL.md", ["skills/meshmind/SKILL.md", "text/markdown; charset=utf-8"]]]);
+const staticFiles = new Map([["/", ["index.html", "text/html; charset=utf-8"]], ["/docs/agent-api", ["agent-api.html", "text/html; charset=utf-8"]], ["/app.js", ["app.js", "text/javascript; charset=utf-8"]], ["/app.css", ["app.css", "text/css; charset=utf-8"]], ["/skill.css", ["skill.css", "text/css; charset=utf-8"]], ["/downloads/meshmind-cli-0.1.0.mjs", ["downloads/meshmind-cli-0.1.0.mjs", "text/javascript; charset=utf-8"]], ["/downloads/meshmind-cli-0.1.0.mjs.sha256", ["downloads/meshmind-cli-0.1.0.mjs.sha256", "text/plain; charset=utf-8"]], ["/skills/meshmind/v1.0.0/SKILL.md", ["skills/meshmind/v1.0.0/SKILL.md", "text/markdown; charset=utf-8"]], ["/skills/meshmind/v1.0.0/SKILL.md.sha256", ["skills/meshmind/v1.0.0/SKILL.md.sha256", "text/plain; charset=utf-8"]]]);
 
 async function body(req: IncomingMessage): Promise<unknown> {
   const parts: Buffer[] = []; let length = 0;
@@ -283,9 +283,18 @@ export function createApp(options: AppOptions) {
     res.setHeader("referrer-policy", "no-referrer");
     res.setHeader("content-security-policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     if (secure) res.setHeader("strict-transport-security", "max-age=31536000");
+    if (method === "GET" && path === "/meshmind-cli.mjs") {
+      res.writeHead(308, { location: "/downloads/meshmind-cli-0.1.0.mjs" }); res.end(); return;
+    }
+    if (method === "GET" && path === "/skills/meshmind/SKILL.md") {
+      res.writeHead(308, { location: "/skills/meshmind/v1.0.0/SKILL.md" }); res.end(); return;
+    }
     if (options.serveStatic !== false && method === "GET" && staticFiles.has(path)) {
       const [file, type] = staticFiles.get(path)!;
       const content = await readFile(publicDir + file);
+      if (path.startsWith("/downloads/") || path.startsWith("/skills/meshmind/v")) res.setHeader("cache-control", "public, max-age=31536000, immutable");
+      if (path === "/downloads/meshmind-cli-0.1.0.mjs") res.setHeader("x-content-sha256", "a8840a3bcf361ec3a4172bbd98a52ff60920999e0058ff159e7df6fc479ae9d8");
+      if (path === "/skills/meshmind/v1.0.0/SKILL.md") res.setHeader("x-content-sha256", "40f9ad20b55c9b2c01c1c14d250e447ec07cecb1129500780162a83cda32a8f3");
       res.writeHead(200, { "content-type": type }); res.end(content); return;
     }
     if (path === "/health" && method === "GET") return json(res, { ok: true, service: "meshmind-saas" });

@@ -5,8 +5,8 @@
 //   # 部署层可附带 --ts-authkey <tailscale auth key>
 import { connect, JSONCodec } from "nats";
 import type { EnrollToken } from "./enroll.ts";
+import { natsOptions } from "./nats-options.ts";
 
-const NATS_URL = process.env.NATS_URL ?? "nats://localhost:4222";
 const jc = JSONCodec();
 
 function flag(name: string, def = ""): string {
@@ -28,7 +28,7 @@ async function main() {
     process.exit(1);
   }
 
-  const nc = await connect({ servers: NATS_URL, name: "meshmind-enroll-cli" });
+  const nc = await connect(natsOptions("meshmind-enroll-cli"));
   try {
     const reply = await nc.request(
       "control.enroll.new",

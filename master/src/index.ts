@@ -9,8 +9,8 @@ import { createServer } from "node:http";
 import { Registry, type Manifest } from "./registry.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { Enrollment } from "./enroll.ts";
+import { natsDisplayUrl, natsOptions } from "./nats-options.ts";
 
-const NATS_URL = process.env.NATS_URL ?? "nats://localhost:4222";
 const ENROLL_PORT = Number(process.env.ENROLL_PORT ?? 7700);
 const jc = JSONCodec();
 const registry = new Registry();
@@ -162,13 +162,13 @@ function printTable() {
 async function main() {
   let nc: NatsConnection;
   try {
-    nc = await connect({ servers: NATS_URL, name: "meshmind-master" });
+    nc = await connect(natsOptions("meshmind-master"));
   } catch (err) {
-    console.error(`无法连接 NATS @ ${NATS_URL}。先启动基础设施：`);
-    console.error("  docker compose -f infra/docker-compose.yml up -d");
+    console.error(`无法连接 NATS @ ${natsDisplayUrl()}。先启动基础设施：`);
+    console.error("  ./infra/init-local-env.sh && docker compose --env-file infra/.env -f infra/docker-compose.yml up -d");
     throw err;
   }
-  console.log(`[master] connected to ${NATS_URL}`);
+  console.log(`[master] connected to ${natsDisplayUrl()}`);
   console.log("[master] 订阅 device.*.register / device.*.heartbeat ...");
 
   const orchestrator = new Orchestrator(nc, registry);

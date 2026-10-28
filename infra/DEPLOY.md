@@ -58,6 +58,8 @@
 
 ```bash
 NATS_URL=nats://ctrl.mesh:4222          # 主 Agent 自己连 NATS
+NATS_USERNAME=...                       # 本地用户名/密码模式；生产推荐下方 per-device creds
+NATS_PASSWORD=...
 PUBLIC_NATS_URL=nats://ctrl.mesh:4222   # 下发给设备
 CONTROL_ADDR=ctrl.mesh:7700             # 写进令牌
 MESH_NAME=ctrl.mesh

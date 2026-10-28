@@ -25,6 +25,8 @@
     "cf:deploy": "wrangler deploy -c cloudflare/wrangler.jsonc",
     "precf:deploy": "node scripts/sync-cli.mjs",
     "cf:smoke": "tsx scripts/cloudflare-smoke.ts",
+    "mac:build:dev": "zsh macos/build.sh --development",
+    "mac:release": "zsh macos/build.sh",
     "mac:smoke": "tsx scripts/smoke-mac-bundle.ts"
   },
   "dependencies": {

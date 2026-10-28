@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -56,18 +57,26 @@ func runCmd(args []string) {
 		natsURL = nats.DefaultURL
 	}
 
-	nc, err := nats.Connect(natsURL,
+	options := []nats.Option{
 		nats.Name("meshmind-agent/"+id.DeviceID),
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(2*time.Second),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, e error) { log.Printf("[nats] disconnected: %v", e) }),
 		nats.ReconnectHandler(func(_ *nats.Conn) { log.Printf("[nats] reconnected") }),
-	)
+	}
+	natsUser, natsPassword := os.Getenv("NATS_USERNAME"), os.Getenv("NATS_PASSWORD")
+	if (natsUser == "") != (natsPassword == "") {
+		log.Fatal("NATS_USERNAME and NATS_PASSWORD must be configured together")
+	}
+	if natsUser != "" {
+		options = append(options, nats.UserInfo(natsUser, natsPassword))
+	}
+	nc, err := nats.Connect(natsURL, options...)
 	if err != nil {
-		log.Fatalf("connect NATS %s: %v", natsURL, err)
+		log.Fatalf("connect NATS %s: %v", safeNATSURL(natsURL), err)
 	}
 	defer nc.Drain()
-	log.Printf("[agent] %s connected to %s (%s/%s)", id.DeviceID, natsURL, runtime.GOOS, runtime.GOARCH)
+	log.Printf("[agent] %s connected to %s (%s/%s)", id.DeviceID, safeNATSURL(natsURL), runtime.GOOS, runtime.GOARCH)
 
 	if err := register(nc, id, manifest, signed); err != nil {
 		log.Fatalf("register: %v", err)
@@ -84,6 +93,17 @@ func runCmd(args []string) {
 	log.Printf("[agent] %s ready — listening for tasks", id.DeviceID)
 	<-ctx.Done()
 	log.Printf("[agent] %s shutting down", id.DeviceID)
+}
+
+func safeNATSURL(raw string) string {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return "configured NATS endpoint"
+	}
+	if parsed.User != nil {
+		parsed.User = url.User("redacted")
+	}
+	return parsed.String()
 }
 
 // registerEnvelope 携带能力清单的原始字节 + 设备签名（防冒充）。

@@ -6,8 +6,17 @@ saas_dir=${script_dir:h}
 dist_dir="$script_dir/dist"
 build_dir="$script_dir/build"
 app="$build_dir/MeshMind Connect.app"
-archive="$dist_dir/MeshMind-Connect-macOS-arm64-0.1.2.zip"
+version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$script_dir/Info.plist")
+archive="$dist_dir/MeshMind-Connect-macOS-arm64-$version.zip"
 node_bin="$(command -v node)"
+development=false
+
+if [[ "${1:-}" == "--development" ]]; then
+  development=true
+elif [[ $# -ne 0 ]]; then
+  print -u2 "Usage: $0 [--development]"
+  exit 2
+fi
 
 if [[ "$(uname -m)" != "arm64" ]]; then
   print -u2 "This release build targets Apple Silicon."
@@ -38,10 +47,29 @@ chmod 755 "$app/Contents/Resources/node"
   --bundle --platform=node --format=cjs --target=node22 \
   '--external:node:*' --log-level=error \
   --outfile="$app/Contents/Resources/gateway.cjs"
-codesign --force --deep --sign - "$app"
-codesign --verify --deep --strict "$app"
+if $development; then
+  codesign --force --deep --sign - "$app"
+  codesign --verify --deep --strict "$app"
+  print "Built local development app at $app"
+  print "Development builds are ad-hoc signed and are never written to macos/dist."
+  exit 0
+fi
+
+: "${MESHMIND_CODESIGN_IDENTITY:?Set MESHMIND_CODESIGN_IDENTITY to an Apple Developer ID Application identity}"
+: "${MESHMIND_NOTARY_PROFILE:?Set MESHMIND_NOTARY_PROFILE to a notarytool keychain profile}"
+
+codesign --force --deep --options runtime --timestamp --sign "$MESHMIND_CODESIGN_IDENTITY" "$app"
+codesign --verify --deep --strict --verbose=2 "$app"
+
+notary_archive="$build_dir/MeshMind-Connect-notary-upload.zip"
+ditto -c -k --sequesterRsrc --keepParent "$app" "$notary_archive"
+xcrun notarytool submit "$notary_archive" --keychain-profile "$MESHMIND_NOTARY_PROFILE" --wait
+xcrun stapler staple "$app"
+xcrun stapler validate "$app"
+spctl --assess --type execute --verbose=2 "$app"
+
 ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
 digest="$(shasum -a 256 "$archive" | awk '{print $1}')"
 print "$digest  ${archive:t}" > "$archive.sha256"
-print "Built $archive"
+print "Built signed and notarized $archive"
 ls -lh "$archive"

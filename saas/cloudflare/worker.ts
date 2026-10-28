@@ -89,6 +89,13 @@ export default {
         headers: { "cache-control": "no-store", "x-content-type-options": "nosniff", "strict-transport-security": "max-age=31536000" },
       });
     }
+    const immutableRedirects: Record<string, string> = {
+      "/meshmind-cli.mjs": "/downloads/meshmind-cli-0.1.0.mjs",
+      "/skills/meshmind/SKILL.md": "/skills/meshmind/v1.0.0/SKILL.md",
+    };
+    if ((request.method === "GET" || request.method === "HEAD") && immutableRedirects[url.pathname]) {
+      return Response.redirect(new URL(immutableRedirects[url.pathname], url.origin), 308);
+    }
     if (url.pathname.startsWith("/api/v1/")) {
       const legacyPath = "/api/" + url.pathname.slice("/api/v1/".length);
       const state = /^\/api\/devices\/(dev_[a-f0-9]{24})\/state$/.exec(legacyPath);
@@ -112,40 +119,23 @@ export default {
       legacyUrl.pathname = legacyPath;
       return hubFetch(new Request(legacyUrl, request));
     }
-    const releases = ["MeshMind-Connect-macOS-arm64-0.1.0.zip", "MeshMind-Connect-macOS-arm64-0.1.1.zip", "MeshMind-Connect-macOS-arm64-0.1.2.zip"];
-    if ((request.method === "GET" || request.method === "HEAD") &&
-        releases.some(archive => [archive, archive + ".sha256"].includes(url.pathname.slice("/downloads/".length))) &&
-        url.pathname.startsWith("/downloads/")) {
-      const key = url.pathname.slice("/downloads/".length);
-      const wantsRange = request.method === "GET" && request.headers.has("range");
-      const object = await env.RELEASES.get(key, wantsRange ? { range: request.headers } : undefined);
-      if (!object) return new Response("Release unavailable",{status:404});
-      const headers = new Headers({
-        "content-type": key.endsWith(".zip") ? "application/zip" : "text/plain; charset=utf-8",
-        "content-disposition": `attachment; filename="${key}"`,
-        "content-length": String(object.size),
-        "accept-ranges": "bytes",
-        "cache-control": "public, max-age=31536000, immutable",
-        "x-content-type-options": "nosniff",
-        "strict-transport-security": "max-age=31536000",
+    if ((request.method === "GET" || request.method === "HEAD") && url.pathname.startsWith("/downloads/MeshMind-Connect-")) {
+      return new Response(request.method === "HEAD" ? null : "This preview was withdrawn. A Developer ID signed and notarized release will replace it.", {
+        status: 410,
+        headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store",
+          "x-content-type-options": "nosniff", "strict-transport-security": "max-age=31536000" },
       });
-      headers.set("etag", object.httpEtag);
-      let status = 200;
-      if (wantsRange && object.range && "offset" in object.range && object.range.offset !== undefined &&
-          "length" in object.range && object.range.length !== undefined) {
-        status = 206;
-        headers.set("content-range", `bytes ${object.range.offset}-${object.range.offset + object.range.length - 1}/${object.size}`);
-        headers.set("content-length", String(object.range.length));
-      }
-      return new Response(request.method === "HEAD" ? null : object.body, {status,headers});
     }
-    if ((request.method === "GET" || request.method === "HEAD") && ["/","/docs/agent-api","/app.js","/app.css","/skill.css","/meshmind-cli.mjs","/skills/meshmind/SKILL.md","/favicon.ico"].includes(url.pathname)) {
+    if ((request.method === "GET" || request.method === "HEAD") && ["/","/docs/agent-api","/app.js","/app.css","/skill.css","/downloads/meshmind-cli-0.1.0.mjs","/downloads/meshmind-cli-0.1.0.mjs.sha256","/skills/meshmind/v1.0.0/SKILL.md","/skills/meshmind/v1.0.0/SKILL.md.sha256","/favicon.ico"].includes(url.pathname)) {
       if (url.pathname === "/favicon.ico") return new Response(null,{status:204});
       // Static Assets canonicalizes *.html to extensionless URLs.
       const assetUrl = url.pathname === "/docs/agent-api" ? new URL("/agent-api", url.origin) : url;
       const asset = await env.ASSETS.fetch(new Request(assetUrl, request));
       const response = new Response(asset.body,asset);
-      response.headers.set("cache-control","no-store");
+      const immutable = url.pathname.startsWith("/downloads/") || url.pathname.startsWith("/skills/meshmind/v");
+      response.headers.set("cache-control", immutable ? "public, max-age=31536000, immutable" : "no-store");
+      if (url.pathname === "/downloads/meshmind-cli-0.1.0.mjs") response.headers.set("x-content-sha256", "a8840a3bcf361ec3a4172bbd98a52ff60920999e0058ff159e7df6fc479ae9d8");
+      if (url.pathname === "/skills/meshmind/v1.0.0/SKILL.md") response.headers.set("x-content-sha256", "40f9ad20b55c9b2c01c1c14d250e447ec07cecb1129500780162a83cda32a8f3");
       response.headers.set("x-content-type-options","nosniff");
       response.headers.set("referrer-policy","no-referrer");
       response.headers.set("strict-transport-security","max-age=31536000");

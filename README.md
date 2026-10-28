@@ -1,6 +1,6 @@
 # MeshMind
 
-**当前方向：v3 设备接入 SaaS。** 线上入口：[mesh.xiaopingfeng.com](https://mesh.xiaopingfeng.com/)。让不同网络中的设备通过本地网关接入，由所有者把指定设备的能力授权给用户和 Agent。展示场景包括 **内网拓竹 X1 Carbon → Codex MCP**、**本机 ADB → Codex MCP**，以及通过 [MeshMind Connect for Mac](https://mesh.xiaopingfeng.com/downloads/MeshMind-Connect-macOS-arm64-0.1.2.zip) 接入任意 USB 串口和局域网 HTTP 设备。
+**当前方向：v3 设备接入 SaaS。** 线上入口：[mesh.xiaopingfeng.com](https://mesh.xiaopingfeng.com/)。让不同网络中的设备通过本地网关接入，由所有者把指定设备的能力授权给用户和 Agent。展示场景包括 **内网拓竹 X1 Carbon → Codex MCP**、**本机 ADB → Codex MCP**，以及通过 MeshMind Connect for Mac 接入任意 USB 串口和局域网 HTTP 设备。
 
 Agent 可通过 MCP、[独立 JSON CLI 与版本化 HTTP API](https://mesh.xiaopingfeng.com/docs/agent-api) 访问获授权的设备。
 
@@ -21,7 +21,7 @@ docker compose -f saas/compose.local.yml up --build -d
 
 完整演示、Mac 程序、X1C / ADB 本地配置、Codex 接入、容器部署及当前限制见 [saas/README.md](./saas/README.md)。架构见 [docs/SAAS-ARCHITECTURE.md](./docs/SAAS-ARCHITECTURE.md)。
 
-**交付状态：本地／容器 MVP 与 Apple Silicon Mac 开发预览版，已部署 Cloudflare 公网试用版。** 模拟流程有自动化集成测试；本机 ADB 已通过真实设备状态与界面结构读取验证，Home Assistant 通过模拟服务集成测试，ESP32 串口仍需实物联调。Mac 版尚未 Apple Developer ID 签名或公证。真实 X1C 仍需按设备固件与证书联调。当前按设备能力接入，通用 TCP/UDP 组网、虚拟 IP 和远程桌面还没有实现。
+**交付状态：本地／容器 MVP 与 Apple Silicon Mac 开发版，已部署 Cloudflare 公网试用版。** 模拟流程有自动化集成测试；本机 ADB 已通过真实设备状态与界面结构读取验证，Home Assistant 通过模拟服务集成测试，ESP32 串口仍需实物联调。公开 Mac 下载会在 Developer ID 签名和 Apple 公证完成后恢复。真实 X1C 仍需按设备固件与证书联调。当前按设备能力接入，通用 TCP/UDP 组网、虚拟 IP 和远程桌面还没有实现。
 
 | 目录 | 当前定位 |
 |---|---|
@@ -64,13 +64,15 @@ curl -X POST localhost:8787/goal -d '{"goal":"shell-all uname -a"}'   # 经 CF �
 ## 快速开始（v1.0 NATS 版，本地/离线备选）
 
 ```bash
-make nats                 # 1. 启动 NATS（需要 Docker）
+make nats                 # 1. 生成本地随机凭证并启动只监听回环地址的 NATS
 make master               # 2. 主 Agent 监听器（终端 A）
 make agent                # 3. 子 Agent，device_id=本机 hostname（终端 B）
 make agent2               #    再起一台 device_id=linux-box
 
 # 4. 给设备发任务（终端 C）
 cd master
+set -a; . ../infra/.env; set +a
+export NATS_URL=nats://127.0.0.1:4222
 npm run task -- mac-studio echo "hello mesh"
 npm run task -- linux-box shell -- ls /tmp
 npm run task -- mac-studio shell -- rm -rf /x   # 会被安全作用域拒绝
@@ -86,7 +88,10 @@ npm run goal -- echo-all "mesh roll call"
 
 ```bash
 # 在主 Agent 上签发一次性令牌
-cd master && npm run enroll -- new --name mac-studio --caps shell,fs
+cd master
+set -a; . ../infra/.env; set +a
+export NATS_URL=nats://127.0.0.1:4222
+npm run enroll -- new --name mac-studio --caps shell,fs
 # → 打印 meshmind-agent join --token <...>
 
 # 在目标设备上入网（本机联调加 --skip-network 跳过 tailscale）
@@ -127,6 +132,6 @@ go build -o meshmind-agent ./agent
 - [ ] P5 高级能力（设备间直传、传感器汇聚、能力调度器）
 
 > 注：本机当前无 `docker compose` 插件，故用 `docker run`（见 Makefile）。
-> 有 compose 时可改用 `infra/docker-compose.yml`。
+> 有 compose 时先运行 `./infra/init-local-env.sh`，再执行 `docker compose --env-file infra/.env -f infra/docker-compose.yml up -d`。NATS、监控端口和 PostgreSQL 均只监听 `127.0.0.1`。
 
 </details>

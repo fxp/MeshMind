@@ -29,7 +29,7 @@ npm run cf:deploy -- --dry-run
 npm run cf:deploy
 ```
 
-发布新的 Mac 版本时，先运行 `./macos/build.sh` 和 `npm run mac:smoke`，再把 `macos/dist/` 中的 ZIP 与校验文件上传到 R2。更新 Worker 下载白名单和网页版本路径后重新部署。ZIP 目前只支持 Apple Silicon，且仅 ad-hoc 签名；正式面向公众前需完成 Apple Developer ID 签名与公证。
+发布新的 Mac 版本时，先配置 `MESHMIND_CODESIGN_IDENTITY` 和 `MESHMIND_NOTARY_PROFILE`，运行 `npm run mac:release`，再执行 `npm run mac:smoke`。发布脚本只有在 Developer ID hardened runtime 签名、Apple 公证、staple 和 Gatekeeper 检查全部通过后才会生成 `macos/dist/` 中的 ZIP 与校验文件。上传到 R2 后再更新 Worker 下载白名单和网页版本路径；本地 `npm run mac:build:dev` 生成的 ad-hoc 构建禁止公开分发。
 
 部署配置在 `saas/cloudflare/wrangler.jsonc`，使用本项目的 Wrangler 版本，不使用旧原型目录的部署脚本。后续部署会保留现有线上 secrets，不需要重复传递密钥。添加或修改绑定后执行 `npm run cf:types` 生成类型。
 

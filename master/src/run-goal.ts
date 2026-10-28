@@ -6,8 +6,8 @@
 //   npm run goal -- shell-on mac-studio du -sh .
 import { connect, JSONCodec } from "nats";
 import type { GoalReport } from "./orchestrator.ts";
+import { natsOptions } from "./nats-options.ts";
 
-const NATS_URL = process.env.NATS_URL ?? "nats://localhost:4222";
 const jc = JSONCodec();
 
 function printReport(r: GoalReport) {
@@ -38,7 +38,7 @@ async function main() {
     console.error("用法: npm run goal -- shell-all uname -a");
     process.exit(1);
   }
-  const nc = await connect({ servers: NATS_URL, name: "meshmind-goal" });
+  const nc = await connect(natsOptions("meshmind-goal"));
   try {
     const reply = await nc.request("control.goal", jc.encode({ goal }), { timeout: 60_000 });
     const r = jc.decode(reply.data) as GoalReport & { error?: string };

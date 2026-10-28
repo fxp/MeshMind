@@ -4,8 +4,8 @@
 //   npm run task -- <deviceId> echo "hello world"
 //   npm run task -- <deviceId> shell -- ls -la /tmp
 import { connect, JSONCodec } from "nats";
+import { natsOptions } from "./nats-options.ts";
 
-const NATS_URL = process.env.NATS_URL ?? "nats://localhost:4222";
 const jc = JSONCodec();
 
 function taskId() {
@@ -44,7 +44,7 @@ async function main() {
     process.exit(1);
   }
 
-  const nc = await connect({ servers: NATS_URL, name: "meshmind-task-sender" });
+  const nc = await connect(natsOptions("meshmind-task-sender"));
   const subject = `device.${deviceId}.task`;
   console.log(`→ ${subject}`, JSON.stringify(task));
   try {

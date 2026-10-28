@@ -1,0 +1,64 @@
+name: Security checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out the exact revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Use Node.js 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            saas/package-lock.json
+            cloudflare/package-lock.json
+            master/package-lock.json
+      - name: Use the Go version declared by the Agent
+        uses: actions/setup-go@0a12ed9d6a96abfb3ffe1005cc5d273f1f07a0a1
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.sum
+      - name: Scan complete Git history for committed secrets
+        run: node scripts/scan-secrets.mjs
+      - name: Install SaaS dependencies
+        working-directory: saas
+        run: npm ci --no-audit --no-fund
+      - name: Verify generated public assets are current
+        working-directory: saas
+        run: npm run sync:cli && git diff --exit-code -- public/
+      - name: Test SaaS authorization and device boundaries
+        working-directory: saas
+        run: npm run typecheck && npm run cf:typecheck && npm test
+      - name: Type-check historical Node prototypes
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix master
+          npm ci --ignore-scripts --no-audit --no-fund --prefix cloudflare
+          npm run typecheck --prefix master
+          npm run typecheck --prefix cloudflare
+      - name: Test the Go device Agent
+        working-directory: agent
+        run: go test ./...
+      - name: Audit production dependencies
+        run: |
+          npm audit --omit=dev --audit-level=high --prefix saas
+          npm audit --omit=dev --audit-level=high --prefix master
+          npm audit --omit=dev --audit-level=high --prefix cloudflare

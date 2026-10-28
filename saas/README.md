@@ -84,9 +84,11 @@ Google 登录需要用户浏览器和 Hub 都能访问相应 Google 服务；设
 
 ## MeshMind Connect for Mac
 
-线上「连接网关」页面提供 [Apple Silicon 安装包](https://mesh.xiaopingfeng.com/downloads/MeshMind-Connect-macOS-arm64-0.1.2.zip) 与 [SHA-256 校验文件](https://mesh.xiaopingfeng.com/downloads/MeshMind-Connect-macOS-arm64-0.1.2.zip.sha256)。要求 macOS 14 或更新版本。程序内置 Node 网关运行时，不要求用户安装仓库依赖。
+MeshMind Connect 要求 macOS 14 或更新版本，程序内置 Node 网关运行时，不要求用户安装仓库依赖。旧的 ad-hoc 签名预览包已经撤回；公开下载会在 Developer ID 签名、Apple 公证和 Gatekeeper 验证全部通过后恢复。
 
-1. 下载并解压，将 `MeshMind Connect.app` 放到「应用程序」文件夹。当前是 **开发预览版**，只有 ad-hoc 签名，尚无 Apple Developer ID 签名和公证；macOS 首次运行可能需要在「系统设置 → 隐私与安全性」中选择「仍要打开」。公开正式版必须补齐签名、公证与自动更新。
+本地开发构建使用 `npm run mac:build:dev`，只输出到忽略的 `macos/build/`，不会生成可分发压缩包。正式发布使用 `npm run mac:release`，并且必须提供 `MESHMIND_CODESIGN_IDENTITY` 与 `MESHMIND_NOTARY_PROFILE`；脚本会执行 hardened runtime 签名、公证、staple 与 `spctl` 验证，任一步失败都不会生成公开发布包。
+
+1. 开发者可运行 `npm run mac:build:dev` 生成仅供本机验证的 App。公开用户应等待 Developer ID 签名和 Apple 公证版本；不要绕过 Gatekeeper 安装来源不明的构建。
 2. 打开程序，添加这台 Mac 能访问的设备。同一个 Mac 网关可以添加多台设备，无需给每台设备创建网关。
 3. 在 MeshMind 网站的「连接网关」生成一次性入网文件，并在十分钟内通过程序导入。程序把网关身份和本地设备配置保存到当前用户的 `~/Library/Application Support/MeshMind Connect/`，权限限制为当前用户；入网成功后删除一次性文件。可选「登录 Mac 后自动启动」。
 4. 网页「设备总览」显示在线设备后，在「用户与 Agent」分别签发范围受限的访问凭证。`device_status` MCP 工具读取 USB、局域网 HTTP 或 Home Assistant 状态；`invoke_device_action` 申请执行本地预声明的操作。

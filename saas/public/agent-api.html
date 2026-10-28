@@ -26,14 +26,14 @@
           <span class="eyebrow">01 / QUICK START</span><h2>五分钟接入</h2>
           <ol class="docs-steps">
             <li><strong>签发凭证</strong><p>设备所有者进入网页「用户与 Agent」，选择设备、权限和有效时间，签发 <em>Agent</em> 凭证并下载为 <code>meshmind-token.txt</code>。凭证只显示一次。</p></li>
-            <li><strong>下载 CLI</strong><p><a href="/meshmind-cli.mjs" download="meshmind-cli.mjs">下载单文件 MeshMind CLI ↓</a>。需要 Node.js 22+；无需安装项目或其他依赖。</p></li>
+            <li><strong>下载并校验 CLI</strong><p><a href="/downloads/meshmind-cli-0.1.0.mjs" download="meshmind-cli.mjs">下载单文件 MeshMind CLI v0.1.0 ↓</a>，并对照 <a href="/downloads/meshmind-cli-0.1.0.mjs.sha256">SHA-256 校验文件</a>。需要 Node.js 22+；无需安装项目或其他依赖。</p></li>
             <li><strong>列出设备</strong><p>将凭证文件路径换成你自己的绝对路径，再运行：</p></li>
           </ol>
           <pre><code>chmod 600 /absolute/path/meshmind-token.txt
 MESHMIND_HUB=https://mesh.xiaopingfeng.com \
 MESHMIND_TOKEN_FILE=/absolute/path/meshmind-token.txt \
 node meshmind-cli.mjs devices list</code></pre>
-          <p class="docs-hint">CLI 把 JSON 写到标准输出，错误写到标准错误；适合脚本和 Agent 调用。本地部署时把 Hub 改为 <code>http://localhost:8788</code>。</p>
+          <p class="docs-hint">CLI v0.1.0 SHA-256：<code>a8840a3bcf361ec3a4172bbd98a52ff60920999e0058ff159e7df6fc479ae9d8</code>。CLI 把 JSON 写到标准输出，错误写到标准错误；适合脚本和 Agent 调用。</p>
         </section>
         <section id="cli" class="docs-section">
           <span class="eyebrow">02 / COMMAND LINE</span><h2>常用 CLI 命令</h2>

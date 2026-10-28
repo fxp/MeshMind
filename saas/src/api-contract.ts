@@ -84,6 +84,10 @@ export const apiContract = {
 export function discovery(origin: string) {
   return { name: "MeshMind", apiVersion: "v1", api: origin + "/api/v1", openapi: origin + "/api/v1/openapi.json",
     mcp: origin + "/mcp", authentication: { type: "bearer", grant: "Owner issues a scoped Agent credential in the MeshMind web UI" },
+    agentAssets: {
+      cli: { version: "0.1.0", url: origin + "/downloads/meshmind-cli-0.1.0.mjs", sha256: "a8840a3bcf361ec3a4172bbd98a52ff60920999e0058ff159e7df6fc479ae9d8" },
+      skill: { version: "1.0.0", url: origin + "/skills/meshmind/v1.0.0/SKILL.md", sha256: "40f9ad20b55c9b2c01c1c14d250e447ec07cecb1129500780162a83cda32a8f3" },
+    },
     safety: { printerActions: "owner_approval", genericDeviceActions: "owner_approval_and_local_allowlist",
       adbInput: "immediate_when_granted", unknownOutcome: "do_not_automatically_retry" } };
 }

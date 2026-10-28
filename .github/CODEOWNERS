@@ -1,0 +1,6 @@
+* @fxp
+/.github/ @fxp
+/saas/cloudflare/ @fxp
+/saas/macos/ @fxp
+/saas/public/skills/ @fxp
+/scripts/scan-secrets.mjs @fxp

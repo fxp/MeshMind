@@ -1,6 +1,5 @@
-# MeshMind 本地开发基础设施
-# P0 只需要 NATS。Postgres 为 P2+ 的注册表/审计预留。
-# 启动: docker compose -f infra/docker-compose.yml up -d
+# MeshMind 历史原型的本地开发基础设施。
+# 先运行 ./infra/init-local-env.sh，再使用 --env-file infra/.env 启动。
 services:
   nats:
     image: nats:2.10-alpine
@@ -11,9 +10,13 @@ services:
       - "8222"
       - "-sd"                       # JetStream 存储目录
       - "/data"
+      - "--user"
+      - "${NATS_USERNAME:?Run ./infra/init-local-env.sh first}"
+      - "--pass"
+      - "${NATS_PASSWORD:?Run ./infra/init-local-env.sh first}"
     ports:
-      - "4222:4222"                 # 客户端
-      - "8222:8222"                 # 监控 http://localhost:8222
+      - "127.0.0.1:4222:4222"       # 仅本机客户端
+      - "127.0.0.1:8222:8222"       # 仅本机监控 http://localhost:8222
     volumes:
       - nats-data:/data
     restart: unless-stopped
@@ -22,11 +25,11 @@ services:
     image: postgres:16-alpine
     container_name: meshmind-postgres
     environment:
-      POSTGRES_USER: meshmind
-      POSTGRES_PASSWORD: meshmind
+      POSTGRES_USER: ${POSTGRES_USER:-meshmind}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./infra/init-local-env.sh first}
       POSTGRES_DB: meshmind
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pg-data:/var/lib/postgresql/data
     restart: unless-stopped

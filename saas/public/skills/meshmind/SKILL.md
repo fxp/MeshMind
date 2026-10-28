@@ -39,7 +39,7 @@ Use one stable `idempotencyKey` for one logical operation and reuse it if the sa
 
 ## CLI fallback
 
-The CLI is available from `${MESHMIND_HUB}/meshmind-cli.mjs`, with the public Hub defaulting to `https://mesh.xiaopingfeng.com`.
+The immutable CLI v0.1.0 is available from `${MESHMIND_HUB}/downloads/meshmind-cli-0.1.0.mjs`. Verify its SHA-256 is `a8840a3bcf361ec3a4172bbd98a52ff60920999e0058ff159e7df6fc479ae9d8` before first use. The public Hub defaults to `https://mesh.xiaopingfeng.com`.
 
 ```bash
 MESHMIND_HUB=https://mesh.xiaopingfeng.com \

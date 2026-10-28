@@ -7,7 +7,7 @@ MeshMind 的公网 Hub 为每个 Agent 签发独立、可撤销的访问凭证�
 ## 五分钟接入
 
 1. 设备所有者在网页「用户与 Agent」选择设备、能力和有效时间，签发 Agent 凭证并下载为 `meshmind-token.txt`。令牌只显示一次；建议文件权限设为 `0600`。
-2. 下载 [独立 CLI](https://mesh.xiaopingfeng.com/meshmind-cli.mjs)。需要 Node.js 22+，无需安装项目或依赖。
+2. 下载版本固定的[独立 CLI v0.1.0](https://mesh.xiaopingfeng.com/downloads/meshmind-cli-0.1.0.mjs)，并对照[校验文件](https://mesh.xiaopingfeng.com/downloads/meshmind-cli-0.1.0.mjs.sha256)验证 SHA-256：`a8840a3bcf361ec3a4172bbd98a52ff60920999e0058ff159e7df6fc479ae9d8`。需要 Node.js 22+，无需安装项目或依赖。
 3. 在 Agent 的运行环境配置 `MESHMIND_HUB` 和 `MESHMIND_TOKEN_FILE`，然后执行：
 
 ```sh
