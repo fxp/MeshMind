@@ -55,6 +55,29 @@ export const deviceActionResult = z.object({
   summary: z.string().max(160).optional(),
 }).strict();
 
+export const gatewayLogEvent = z.enum([
+  "gateway.ready",
+  "gateway.stopping",
+  "device.task.started",
+  "device.task.completed",
+  "device.task.failed",
+  "device.task.denied",
+]);
+export const gatewayLogFrame = z.object({
+  kind: z.literal("log"),
+  level: z.enum(["info", "warn", "error"]),
+  event: gatewayLogEvent,
+  fields: z.object({
+    connector: z.enum(["bambu", "simulator", "adb", "esp32_serial", "usb_serial", "home_assistant", "local_http"]).optional(),
+    action: z.enum(["status", "pause", "resume", "stop", "adb_input", "adb_ui", "device_invoke"]).optional(),
+    outcome: z.enum(["started", "completed", "failed", "denied", "stopping"]).optional(),
+    deviceCount: z.number().int().min(0).max(32).optional(),
+    durationMs: z.number().int().min(0).max(120_000).optional(),
+    errorId: z.string().regex(/^[A-Za-z][A-Za-z0-9]*(?:\/[A-Za-z0-9_-]{1,40})?$/).optional(),
+  }).strict(),
+}).strict();
+export type GatewayLogFrame = z.infer<typeof gatewayLogFrame>;
+
 export class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }

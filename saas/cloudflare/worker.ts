@@ -8,6 +8,10 @@ import { HttpError } from "../src/schema.ts";
 import type { GatewaySocket } from "../src/broker.ts";
 import { DurableSqlite } from "./sqlite.ts";
 import { apiContract, discovery } from "../src/api-contract.ts";
+import { createSystemLogger, normalizedRoute, safeErrorId } from "../src/system-log.ts";
+
+const edgeLogger = createSystemLogger({ service: "meshmind-edge" });
+const hubLogger = createSystemLogger({ service: "meshmind-hub" });
 
 class NativeSocket extends EventEmitter implements GatewaySocket {
   constructor(private socket: WebSocket) {
@@ -18,7 +22,7 @@ class NativeSocket extends EventEmitter implements GatewaySocket {
       this.emit("message", bytes);
     });
     socket.addEventListener("error", () => this.emit("error"));
-    socket.addEventListener("close", () => this.emit("close"));
+    socket.addEventListener("close", event => this.emit("close", event.code));
   }
   get readyState() { return this.socket.readyState; }
   send(data: string, callback?: (error?: Error) => void) {
@@ -36,7 +40,8 @@ export class SaasHub extends DurableObject<Env> {
     const store = new Store(":memory:", new DurableSqlite(ctx.storage));
     this.app = createApp({ database: ":memory:", store, publicUrl: env.PUBLIC_URL, allowSignup: env.ALLOW_SIGNUP === "true",
       nativeWebSockets: false, serveStatic: false, trustedClientIpHeader: true,
-      google: env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET ? {clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET} : undefined });
+      google: env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET ? {clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET} : undefined,
+      systemLogger: hubLogger, requestLogging: false });
     this.ready = new Promise((resolve, reject) => {
       this.app.server.once("error", reject);
       this.app.server.listen(0, () => {
@@ -52,7 +57,10 @@ export class SaasHub extends DurableObject<Env> {
       try {
         row = this.app.authenticateGateway({url:request.url,authorization:request.headers.get("authorization") ?? undefined,
           origin:request.headers.get("origin") ?? undefined,ip:request.headers.get("cf-connecting-ip") ?? "unknown"});
-      } catch (error) { return Response.json({error:"Gateway authentication rejected"},{status:error instanceof HttpError ? error.status : 401}); }
+      } catch (error) {
+        hubLogger.event("warn", "gateway", "authentication.rejected", { status: error instanceof HttpError ? error.status : 401, errorId: safeErrorId(error) });
+        return Response.json({error:"Gateway authentication rejected"},{status:error instanceof HttpError ? error.status : 401});
+      }
       const pair = new WebSocketPair();
       pair[1].accept();
       this.app.broker.connect(new NativeSocket(pair[1]), row.id);
@@ -62,8 +70,7 @@ export class SaasHub extends DurableObject<Env> {
   }
 }
 
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+async function routeRequest(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.origin !== new URL(env.PUBLIC_URL).origin) return new Response("Unknown site",{status:404});
     // Durable Object HTTP uses a loopback Node adapter. Set this private header
@@ -143,5 +150,25 @@ export default {
       return response;
     }
     return hubFetch(request);
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const startedAt = Date.now();
+    const url = new URL(request.url);
+    const requestId = request.headers.get("cf-ray") ?? crypto.randomUUID();
+    const route = normalizedRoute(url.pathname);
+    try {
+      const response = await routeRequest(request, env);
+      edgeLogger.event(response.status >= 500 ? "error" : response.status >= 400 ? "warn" : "info", "http", "request.completed", {
+        requestId, method: request.method, route, status: response.status, durationMs: Date.now() - startedAt,
+      });
+      return response;
+    } catch (error) {
+      edgeLogger.event("error", "http", "request.failed", {
+        requestId, method: request.method, route, status: 500, durationMs: Date.now() - startedAt, errorId: safeErrorId(error),
+      });
+      throw error;
+    }
   },
 } satisfies ExportedHandler<Env>;

@@ -13,6 +13,7 @@ import { authenticate, canUse, requireOwner, hash, secret, id, bearer, parseBear
 import { HttpError, validate, permission, controlAction, adbInput, deviceActionInput, deviceActionResult } from "./schema.ts";
 import { GoogleLogin, GoogleLoginError, type GoogleOptions, type GoogleProvider } from "./google.ts";
 import { apiContract, discovery } from "./api-contract.ts";
+import { normalizedRoute, safeErrorId, silentSystemLogger, type SystemLogger } from "./system-log.ts";
 
 export interface AppOptions {
   database: string;
@@ -25,6 +26,8 @@ export interface AppOptions {
   google?: GoogleOptions;
   googleProvider?: GoogleProvider;
   trustedClientIpHeader?: boolean;
+  systemLogger?: SystemLogger;
+  requestLogging?: boolean;
 }
 const nameInput = z.object({ name: z.string().trim().min(1).max(80) }).strict();
 const principalInput = z.object({
@@ -50,8 +53,9 @@ export function createApp(options: AppOptions) {
   const origin = new URL(options.publicUrl).origin;
   const secure = origin.startsWith("https:");
   const store = options.store ?? new Store(options.database);
+  const logger = options.systemLogger ?? silentSystemLogger;
   const google = options.google ? new GoogleLogin(store, origin, options.google, options.allowSignup, options.googleProvider) : undefined;
-  const broker = new Broker(store);
+  const broker = new Broker(store, logger);
   const limiter = new RateLimiter();
   const clientIp = (req: IncomingMessage) => {
     const forwarded = options.trustedClientIpHeader ? req.headers["x-meshmind-client-ip"] : undefined;
@@ -499,7 +503,18 @@ export function createApp(options: AppOptions) {
   }
 
   const listener = (req: IncomingMessage, res: ServerResponse) => {
+    const requestId = id("req_");
+    const startedAt = Date.now();
+    const route = normalizedRoute(new URL(req.url ?? "/", origin).pathname);
+    res.setHeader("x-request-id", requestId);
+    if (options.requestLogging !== false) res.once("finish", () => logger.event(res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info", "http", "request.completed", {
+      requestId, method: req.method ?? "GET", route, status: res.statusCode, durationMs: Date.now() - startedAt,
+    }));
     handle(req, res).catch(err => {
+      logger.event(err instanceof HttpError && err.status < 500 ? "warn" : "error", "http", "request.failed", {
+        requestId, method: req.method ?? "GET", route, status: err instanceof HttpError ? err.status : 500,
+        durationMs: Date.now() - startedAt, errorId: safeErrorId(err),
+      });
       if (res.headersSent) { res.destroy(); return; }
       json(res, { error: err instanceof HttpError ? err.message : "服务暂时无法处理请求" }, err instanceof HttpError ? err.status : 500);
     });

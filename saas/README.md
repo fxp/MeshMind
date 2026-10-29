@@ -1,5 +1,7 @@
 # MeshMind SaaS · X1C / Android ADB → Codex
 
+生产环境的请求、网关和设备执行日志使用 Cloudflare Workers Logs；查看方式和隐私字段白名单见 [日志与可观测性](../docs/OBSERVABILITY.md)。
+
 多租户设备接入与能力授权的第一版。每位所有者拥有独立设备空间；局域网网关主动通过 HTTPS/WSS 连接 Hub；用户和 Agent 通过独立、可撤销、会到期的凭证访问指定设备。
 
 **当前交付：本地、容器及 Cloudflare 公网版本。线上入口为 [mesh.xiaopingfeng.com](https://mesh.xiaopingfeng.com/)，没有连接或操作你的真实打印机。** 模拟器覆盖打印机完整流程；本机 ADB 已完成真实设备状态与界面结构读取。真实 X1C 的 MQTT 连接器仍需按固件、LAN 模式和证书联调。

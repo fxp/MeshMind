@@ -13,6 +13,7 @@ import { normalizeReport } from "../src/connectors.ts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { fileURLToPath } from "node:url";
+import { createSystemLogger, type SystemLogEntry } from "../src/system-log.ts";
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 async function until(fn: () => Promise<boolean>, timeout = 5000) {
@@ -23,7 +24,9 @@ async function until(fn: () => Promise<boolean>, timeout = 5000) {
 
 test("SaaS tenant, gateway, delegation, approval and MCP boundaries", async t => {
   const dir = await mkdtemp(join(tmpdir(), "meshmind-test-"));
-  const app = createApp({ database: join(dir, "hub.sqlite"), publicUrl: "http://localhost", allowSignup: true });
+  const systemLogs: SystemLogEntry[] = [];
+  const app = createApp({ database: join(dir, "hub.sqlite"), publicUrl: "http://localhost", allowSignup: true,
+    systemLogger: createSystemLogger({ service: "meshmind-test", sink: entry => systemLogs.push(entry) }) });
   app.server.listen(0, "127.0.0.1"); await once(app.server, "listening");
   const base = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
   const clients: { stop(): void }[] = [];
@@ -41,6 +44,17 @@ test("SaaS tenant, gateway, delegation, approval and MCP boundaries", async t =>
     clients.push(await startGateway({ config, stateFile: join(dir, "gw-a.json"), enrollment: { ...grant.body.enrollment, hub: base } }));
     await until(async () => (await call("/api/devices", undefined, owner)).body.devices.length === 1);
     const device = (await call("/api/devices", undefined, owner)).body.devices[0];
+    await t.test("authenticated local gateway events become redacted structured system logs", async () => {
+      await until(async () => systemLogs.some(entry => entry.component === "local-gateway" && entry.event === "gateway.ready"));
+      await call(`/api/devices/${device.id}/status`, undefined, owner);
+      await until(async () => systemLogs.some(entry => entry.component === "local-gateway" && entry.event === "device.task.completed"));
+      const serialized = JSON.stringify(systemLogs);
+      const state = JSON.parse(await readFile(join(dir, "gw-a.json"), "utf8"));
+      assert.equal(serialized.includes(state.token), false);
+      assert.equal(serialized.includes(device.localId), false);
+      assert.ok(systemLogs.some(entry => entry.component === "http" && entry.event === "request.completed"));
+      assert.ok(systemLogs.some(entry => entry.component === "device" && entry.event === "task.result" && entry.outcome === "completed"));
+    });
     await t.test("versioned Agent API exposes a public contract and scoped unified state", async () => {
       const guide = await fetch(base + "/docs/agent-api");
       assert.equal(guide.status, 200);
