@@ -35,14 +35,12 @@
       }
     ]
   },
-  "migrations": [
-    {
-      "tag": "v1",
-      "new_sqlite_classes": [
-        "SaasHub"
-      ]
+  "exports": {
+    "SaasHub": {
+      "type": "durable-object",
+      "storage": "sqlite"
     }
-  ],
+  },
   "alias": {
     "node:sqlite": "./unsupported-sqlite.ts",
     "ws": "./unsupported-ws.ts"
