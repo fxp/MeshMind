@@ -24,6 +24,7 @@
     "cf:types": "wrangler types cloudflare/worker-configuration.d.ts -c cloudflare/wrangler.jsonc",
     "cf:deploy": "wrangler deploy -c cloudflare/wrangler.jsonc",
     "precf:deploy": "node scripts/sync-cli.mjs",
+    "cf:logs": "wrangler tail -c cloudflare/wrangler.jsonc --format pretty",
     "cf:smoke": "tsx scripts/cloudflare-smoke.ts",
     "mac:build:dev": "zsh macos/build.sh --development",
     "mac:release": "zsh macos/build.sh",

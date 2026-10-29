@@ -25,6 +25,8 @@ docker compose -f saas/compose.local.yml up --build -d
 
 完整演示、Mac 程序、X1C / ADB 本地配置、Codex 接入、容器部署及当前限制见 [saas/README.md](./saas/README.md)。架构见 [docs/SAAS-ARCHITECTURE.md](./docs/SAAS-ARCHITECTURE.md)。
 
+生产环境的结构化系统日志保存在 Cloudflare Workers Logs。记录范围、查询方式与隐私边界见 [日志与可观测性](./docs/OBSERVABILITY.md)。
+
 **交付状态：本地／容器 MVP 与 Apple Silicon Mac 开发版，已部署 Cloudflare 公网试用版。** 模拟流程有自动化集成测试；本机 ADB 已通过真实设备状态与界面结构读取验证，Home Assistant 通过模拟服务集成测试，ESP32 串口仍需实物联调。公开 Mac 下载会在 Developer ID 签名和 Apple 公证完成后恢复。真实 X1C 仍需按设备固件与证书联调。当前按设备能力接入，通用 TCP/UDP 组网、虚拟 IP 和远程桌面还没有实现。
 
 | 目录 | 当前定位 |

@@ -7,6 +7,7 @@ import { WebSocket } from "ws";
 import { z } from "zod";
 import { connectorConfig, simulatedPrinter, bambuPrinter, adbDevice, homeAssistantDevice, esp32SerialDevice, usbSerialDevice, localHttpDevice, type Connector } from "./connectors.ts";
 import { adbInput, deviceActionInput } from "./schema.ts";
+import { safeErrorId } from "./system-log.ts";
 
 const gatewayState = z.object({ gatewayId: z.string(), token: z.string(), publicKey: z.string(), privateKey: z.string(), hub: z.string() }).strict();
 const enrollment = z.object({ hub: z.string(), token: z.string() }).strict();
@@ -27,13 +28,6 @@ async function savePrivate(filename: string, value: unknown) {
   const temporary = filename + ".tmp";
   await writeFile(temporary, JSON.stringify(value, null, 2), { mode: 0o600 });
   await chmod(temporary, 0o600); await rename(temporary, filename);
-}
-
-function safeErrorId(error: unknown): string {
-  const name = error instanceof Error ? error.name : "UnknownError";
-  const code = typeof error === "object" && error !== null && "code" in error
-    && ["string", "number"].includes(typeof error.code) ? String(error.code) : "";
-  return code && /^[A-Za-z0-9_-]{1,40}$/.test(code) ? `${name}/${code}` : name;
 }
 
 export async function startGateway(options: { stateFile: string; config: z.infer<typeof localConfig>; enrollment?: z.infer<typeof enrollment>; log?: (message: string) => void }) {
@@ -79,6 +73,8 @@ export async function startGateway(options: { stateFile: string; config: z.infer
     let registered = false;
     const registrationTimeout = setTimeout(() => { if (!registered) ws.close(4004, "registration timeout"); }, 10_000);
     const send = (value: unknown) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(value)); };
+    const systemLog = (level: "info" | "warn" | "error", event: "gateway.ready" | "gateway.stopping" | "device.task.started" | "device.task.completed" | "device.task.failed" | "device.task.denied", fields: Record<string, unknown>) =>
+      send({ kind: "log", level, event, fields });
     ws.on("message", async bytes => {
       try {
         const frame = JSON.parse(bytes.toString());
@@ -88,6 +84,7 @@ export async function startGateway(options: { stateFile: string; config: z.infer
         } else if (frame.kind === "registered" && !registered) {
           registered = true; retry = 1000; clearTimeout(registrationTimeout);
           log("网关已连接；本地设备接口可供获授权的用户使用");
+          systemLog("info", "gateway.ready", { deviceCount: connectors.size });
           heartbeats = setInterval(() => send({ kind: "heartbeat" }), 5000);
         } else if (frame.kind === "task" && registered) {
           const request = task.parse(frame);
@@ -96,16 +93,21 @@ export async function startGateway(options: { stateFile: string; config: z.infer
           if (work.has(request.taskId)) return;
           const connector = connectors.get(request.localId);
           if (!connector || !connector.manifest.capabilities.includes(request.action) || work.size >= 8) {
+            systemLog("warn", "device.task.denied", { connector: connector?.manifest.connector, action: request.action, outcome: "denied" });
             send({ kind: "result", taskId: request.taskId, ok: false, error: "local policy denied" }); return;
           }
           work.add(request.taskId);
+          const taskStartedAt = Date.now();
+          systemLog("info", "device.task.started", { connector: connector.manifest.connector, action: request.action, outcome: "started" });
           let result: unknown;
           try {
             const value = request.action === "status" ? await connector.status()
               : request.action === "adb_ui" ? await connector.ui?.() : await connector.control(request.action, request.input);
             result = { kind: "result", taskId: request.taskId, ok: true, value };
+            systemLog("info", "device.task.completed", { connector: connector.manifest.connector, action: request.action, outcome: "completed", durationMs: Date.now() - taskStartedAt });
           } catch (error) {
             log(`设备操作失败（${request.action}，${safeErrorId(error)}）`);
+            systemLog("error", "device.task.failed", { connector: connector.manifest.connector, action: request.action, outcome: "failed", durationMs: Date.now() - taskStartedAt, errorId: safeErrorId(error) });
             result = { kind: "result", taskId: request.taskId, ok: false, error: "local device unavailable" };
           }
           finally { work.delete(request.taskId); }
@@ -128,7 +130,10 @@ export async function startGateway(options: { stateFile: string; config: z.infer
     });
   };
   connect();
-  return { stop() { stopped = true; clearTimeout(reconnectTimer); clearInterval(heartbeats); connection?.terminate(); for (const c of connectors.values()) c.close(); } };
+  return { stop() {
+    if (connection?.readyState === WebSocket.OPEN) connection.send(JSON.stringify({ kind: "log", level: "info", event: "gateway.stopping", fields: { outcome: "stopping" } }));
+    stopped = true; clearTimeout(reconnectTimer); clearInterval(heartbeats); connection?.terminate(); for (const c of connectors.values()) c.close();
+  } };
 }
 
 async function main() {
